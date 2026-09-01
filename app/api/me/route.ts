@@ -29,7 +29,10 @@ export async function GET() {
   // Chỉ số 7 ngày so với 7 ngày trước đó, gộp mọi kênh verified
   const chIds = (channels ?? []).filter((c) => c.status === "verified").map((c) => c.id);
   const today = todayVN();
-  const stats = { followers7: 0, views7: 0, videos7: 0, followers7prev: 0, views7prev: 0, latestFollowers: {} as Record<string, number | null> };
+  const stats = {
+    followers7: 0, views7: 0, videos7: 0, followers7prev: 0, views7prev: 0,
+    latestByChannel: {} as Record<string, { followers: number | null; total_views: number | null; videos_count: number | null; snapshot_date: string } | null>,
+  };
   if (chIds.length) {
     const { data: snaps } = await db
       .from("channel_snapshots")
@@ -47,7 +50,14 @@ export async function GET() {
       const now = list.at(-1);
       const w1 = at(addDays(today, -7));
       const w2 = at(addDays(today, -14));
-      stats.latestFollowers[chId] = now?.followers ?? null;
+      stats.latestByChannel[chId] = now
+        ? {
+            followers: now.followers ?? null,
+            total_views: now.total_views != null ? Number(now.total_views) : null,
+            videos_count: now.videos_count ?? null,
+            snapshot_date: now.snapshot_date,
+          }
+        : null;
       if (now && w1) {
         stats.followers7 += Math.max(0, (now.followers ?? 0) - (w1.followers ?? 0));
         stats.views7 += Math.max(0, Number(now.total_views ?? 0) - Number(w1.total_views ?? 0));

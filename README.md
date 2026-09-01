@@ -56,6 +56,13 @@ curl "http://localhost:3300/api/cron/daily-scoring?secret=CRON_SECRET_CUA_SEP"
 - Thông báo Zalo, huy hiệu, màn trình chiếu sự kiện, vai trò trợ giảng — V2 theo lộ trình.
 - Mapper dữ liệu Apify viết theo cấu trúc dataset phổ biến của 4 Actor khuyến nghị — **cần chạy thử 1 run thật và đối chiếu**, vì Actor bên thứ ba có thể đổi format. Đổi Actor: sửa bảng `platform_configs`, không cần sửa code.
 
+## Cổng Apify & bảng xếp hạng chi tiết (cập nhật 01/09/2026)
+
+- **Admin > tab "Quét & Apify"**: trạng thái kết nối token, đổi Actor / bật-tắt từng nền tảng, nút **Quét ngay** và **Tính điểm lại hôm nay**, nhật ký 20 run gần nhất kèm chi phí USD (hôm nay + 30 ngày), cảnh báo kênh chưa quét được và kênh bị gắn cờ gian lận.
+- **BXH chi tiết**: admin toggle "Xem bảng chi tiết" — điểm thành phần từng chỉ số (follower/view/video/tương tác/chuyên cần/điều chỉnh), điểm hôm nay, biến động hạng, số kênh xác minh. API: `GET /api/leaderboard?campaign_id=&detail=1`.
+- **Hồ sơ công khai**: bấm vào học viên trên mọi bảng xếp hạng (kể cả trang public) mở hồ sơ: kênh + follower/view/video mới nhất, điểm thành phần từng chiến dịch. API: `GET /api/students/profile?public_id=` — không bao giờ trả SĐT.
+- **Dashboard học viên**: mỗi kênh hiện đủ follower · view · video; nút "Bảng điểm chi tiết" xem điểm thành phần cả lớp.
+
 ## Cấu trúc chính
 
 ```

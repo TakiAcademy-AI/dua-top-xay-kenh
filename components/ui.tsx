@@ -80,11 +80,11 @@ export function deltaOf(row: LBRow): { text: string; cls: string } {
   return d > 0 ? { text: `▲ ${d}`, cls: "up" } : { text: `▼ ${-d}`, cls: "down" };
 }
 
-export function Lane({ row, max, me }: { row: LBRow; max: number; me?: boolean }) {
+export function Lane({ row, max, me, onClick }: { row: LBRow; max: number; me?: boolean; onClick?: () => void }) {
   const w = max > 0 ? Math.max(2, Math.round((row.total_score / max) * 100)) : 2;
   const d = deltaOf(row);
   return (
-    <div className={`lane${me ? " me" : ""}`}>
+    <div className={`lane${me ? " me" : ""}`} onClick={onClick} style={onClick ? { cursor: "pointer" } : undefined}>
       <div className="rk">{row.rank ?? "—"}</div>
       <div className="ava" style={me ? { background: "var(--orange)" } : undefined}>
         {me ? "BẠN" : initials(row.name)}
@@ -143,3 +143,93 @@ export const METRIC_LABEL: Record<string, string> = {
   weekly_bonus: "Thưởng chuyên cần",
   manual_adjust: "Điều chỉnh tay",
 };
+
+const fmtN = (n: number | null | undefined) => (n == null ? "—" : Math.round(n).toLocaleString("vi-VN"));
+
+/* ==== Hồ sơ công khai (bấm vào học viên trên BXH) — không lộ SĐT ==== */
+export type PublicProfile = {
+  student: { public_id: string; full_name: string; class_name: string | null; joined_at: string };
+  channels: {
+    platform: string; username: string; url: string; verified: boolean;
+    followers: number | null; total_views: number | null; videos_count: number | null;
+  }[];
+  participations: {
+    campaign_name: string; campaign_status: string; rank: number | null;
+    total_score: number; breakdown: Record<string, number>;
+  }[];
+};
+
+export function ProfileModal({ publicId, onClose }: { publicId: string; onClose: () => void }) {
+  const [data, setData] = useState<PublicProfile | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    fetch(`/api/students/profile?public_id=${encodeURIComponent(publicId)}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error((await r.json()).error ?? "Lỗi");
+        setData(await r.json());
+      })
+      .catch((e) => setErr(e.message));
+  }, [publicId]);
+
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+        {err && <p className="mini-note">{err}</p>}
+        {!data && !err && <p className="mini-note">Đang tải hồ sơ…</p>}
+        {data && (
+          <>
+            <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 2 }}>
+              {data.student.full_name}{" "}
+              <span className="id-chip" style={{ fontSize: 11, background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 6, padding: "1px 6px", color: "var(--muted)" }}>
+                {data.student.public_id}
+              </span>
+            </h3>
+            <p className="mini-note" style={{ marginBottom: 14 }}>
+              {data.student.class_name ?? "—"} · Tham gia từ {data.student.joined_at.split("-").reverse().join("/")}
+            </p>
+
+            {data.channels.map((c, i) => {
+              const pf = PF_ICON[c.platform] ?? PF_ICON.tiktok;
+              return (
+                <div className="chan" key={i}>
+                  <div className={`pf ${pf.cls}`}>{pf.icon}</div>
+                  <div className="u">
+                    <b>@{c.username}</b>
+                    <span>
+                      {pf.label} · {fmtN(c.followers)} follower
+                      {c.total_views != null ? ` · ${fmtN(c.total_views)} view` : ""}
+                      {c.videos_count != null ? ` · ${fmtN(c.videos_count)} video` : ""}
+                    </span>
+                  </div>
+                  <span className={`st ${c.verified ? "st-ok" : "st-wait"}`}>{c.verified ? "Đã xác minh" : "Chờ xác minh"}</span>
+                </div>
+              );
+            })}
+
+            {data.participations.map((p, i) => (
+              <div key={i} style={{ marginTop: 12 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--navy)" }}>
+                  🏁 {p.campaign_name}: Hạng {p.rank ?? "—"} · {fmtN(p.total_score)} điểm
+                </p>
+                <div className="table-scroll">
+                  <table>
+                    <tbody>
+                      {Object.entries(p.breakdown)
+                        .filter(([, v]) => v !== 0)
+                        .map(([m, v]) => (
+                          <tr key={m}>
+                            <td>{METRIC_LABEL[m] ?? m}</td>
+                            <td style={{ textAlign: "right" }}><b>{fmtN(v)}</b></td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

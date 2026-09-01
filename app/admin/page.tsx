@@ -28,7 +28,7 @@ export default function AdminPage() {
   const { toast, toastNode } = useToast();
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
-  const [tab, setTab] = useState<"camp" | "new" | "students" | "bxh">("camp");
+  const [tab, setTab] = useState<"camp" | "new" | "students" | "bxh" | "scrape">("camp");
 
   const [stats, setStats] = useState({ running: 0, students: 0, channels: 0 });
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -36,8 +36,12 @@ export default function AdminPage() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [q, setQ] = useState("");
   const [lbCampId, setLbCampId] = useState("");
-  const [lbRows, setLbRows] = useState<LBRow[]>([]);
+  const [lbRows, setLbRows] = useState<any[]>([]);
+  const [lbView, setLbView] = useState<"lanes" | "detail">("lanes");
+  const [lbLastDate, setLbLastDate] = useState<string | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
+  const [scrape, setScrape] = useState<any | null>(null);
+  const [scrapeBusy, setScrapeBusy] = useState(false);
 
   // Form tạo chiến dịch
   const [form, setForm] = useState({
@@ -75,9 +79,59 @@ export default function AdminPage() {
   useEffect(() => { if (authed && tab === "students") loadStudents(q); }, [authed, tab, q, loadStudents]);
   useEffect(() => {
     if (authed && tab === "bxh" && lbCampId) {
-      fetch(`/api/leaderboard?campaign_id=${lbCampId}`).then((r) => r.json()).then((d) => setLbRows(d.rows ?? []));
+      fetch(`/api/leaderboard?campaign_id=${lbCampId}&detail=1`)
+        .then((r) => r.json())
+        .then((d) => { setLbRows(d.rows ?? []); setLbLastDate(d.last_entry_date ?? null); });
     }
   }, [authed, tab, lbCampId]);
+
+  const loadScrape = useCallback(async () => {
+    const r = await fetch("/api/admin/scrape");
+    if (r.ok) setScrape(await r.json());
+  }, []);
+  useEffect(() => { if (authed && tab === "scrape") loadScrape(); }, [authed, tab, loadScrape]);
+
+  async function scrapeAction(action: "scrape" | "score") {
+    if (scrapeBusy) return;
+    setScrapeBusy(true);
+    try {
+      const r = await fetch("/api/admin/scrape", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
+      });
+      const d = await r.json();
+      if (!r.ok) { toast(d.error ?? "Lỗi"); return; }
+      if (action === "scrape") {
+        toast(d.started?.length
+          ? `Đã start ${d.started.length} run Apify (${d.started.map((s: any) => `${s.platform}: ${s.channels} kênh`).join(", ")})`
+          : "Không có kênh nào cần quét hoặc nền tảng nào đang bật");
+      } else {
+        toast(`Đã tính điểm ${d.date}: ${d.campaigns} chiến dịch, ${d.entries} dòng điểm${d.flagged?.length ? `, gắn cờ ${d.flagged.length} kênh` : ""}`);
+      }
+      loadScrape();
+    } finally {
+      setScrapeBusy(false);
+    }
+  }
+
+  async function editActor(cfg: any) {
+    const actor = prompt(`Actor Apify cho ${cfg.platform} (dạng tac-gia/ten-actor):`, cfg.apify_actor)?.trim();
+    if (!actor || actor === cfg.apify_actor) return;
+    const r = await fetch("/api/admin/scrape", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: cfg.platform, apify_actor: actor }),
+    });
+    if (r.ok) { toast("Đã đổi Actor"); loadScrape(); }
+    else toast((await r.json()).error ?? "Lỗi");
+  }
+
+  async function togglePlatform(cfg: any) {
+    const r = await fetch("/api/admin/scrape", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: cfg.platform, is_active: !cfg.is_active }),
+    });
+    if (r.ok) { toast(cfg.is_active ? `Đã tắt quét ${cfg.platform}` : `Đã bật quét ${cfg.platform}`); loadScrape(); }
+    else toast((await r.json()).error ?? "Lỗi");
+  }
 
   async function login() {
     const r = await fetch("/api/admin/login", {
@@ -190,6 +244,7 @@ export default function AdminPage() {
           <button className={tab === "new" ? "on" : ""} onClick={() => setTab("new")}>+ Tạo chiến dịch</button>
           <button className={tab === "students" ? "on" : ""} onClick={() => setTab("students")}>Học viên</button>
           <button className={tab === "bxh" ? "on" : ""} onClick={() => setTab("bxh")}>Bảng xếp hạng</button>
+          <button className={tab === "scrape" ? "on" : ""} onClick={() => setTab("scrape")}>Quét & Apify</button>
         </div>
 
         {tab === "camp" && (
@@ -340,13 +395,169 @@ export default function AdminPage() {
               <select style={{ maxWidth: 280, marginLeft: "auto" }} value={lbCampId} onChange={(e) => setLbCampId(e.target.value)}>
                 {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              <button className="btn-ghost btn-sm" onClick={() => setLbView(lbView === "lanes" ? "detail" : "lanes")}>
+                {lbView === "lanes" ? "Xem bảng chi tiết" : "Xem đường đua"}
+              </button>
               <a className="btn-ghost btn-sm" href={`/api/admin/export/leaderboard?campaign_id=${lbCampId}`} style={{ textDecoration: "none" }}>
                 Xuất Excel
               </a>
             </h3>
-            <div>
-              {lbRows.map((r) => <Lane key={r.student_id} row={r} max={maxLb} />)}
-              {!lbRows.length && <p className="mini-note">Chưa có dữ liệu xếp hạng cho chiến dịch này.</p>}
+            {lbLastDate && (
+              <p className="mini-note" style={{ marginBottom: 10 }}>
+                Dòng điểm gần nhất: {dmy(lbLastDate)}. Cột "Hôm nay" = điểm của ngày đó.
+              </p>
+            )}
+            {lbView === "lanes" ? (
+              <div>
+                {lbRows.map((r) => <Lane key={r.student_id} row={r} max={maxLb} />)}
+                {!lbRows.length && <p className="mini-note">Chưa có dữ liệu xếp hạng cho chiến dịch này.</p>}
+              </div>
+            ) : (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Hạng</th><th>±</th><th>ID</th><th>Học viên</th><th>Lớp</th><th>Kênh ✓</th>
+                      <th>Follower</th><th>Lượt xem</th><th>Video</th><th>Tương tác</th>
+                      <th>Chuyên cần</th><th>Điều chỉnh</th><th>Hôm nay</th><th>Tổng</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lbRows.map((r: any) => {
+                      const d = r.prev_rank != null && r.rank != null ? r.prev_rank - r.rank : 0;
+                      return (
+                        <tr key={r.student_id}>
+                          <td><b>{r.rank ?? "—"}</b></td>
+                          <td className={d > 0 ? "up" : d < 0 ? "down" : ""}>{d > 0 ? `▲${d}` : d < 0 ? `▼${-d}` : "—"}</td>
+                          <td><b>{r.public_id}</b></td>
+                          <td>{r.name}</td>
+                          <td>{r.class_name ?? "—"}</td>
+                          <td>{r.verified_channels ?? 0}</td>
+                          <td>{fmt(r.breakdown?.follower ?? 0)}</td>
+                          <td>{fmt(r.breakdown?.views ?? 0)}</td>
+                          <td>{fmt(r.breakdown?.new_video ?? 0)}</td>
+                          <td>{fmt(r.breakdown?.engagement ?? 0)}</td>
+                          <td>{fmt(r.breakdown?.weekly_bonus ?? 0)}</td>
+                          <td>{fmt(r.breakdown?.manual_adjust ?? 0)}</td>
+                          <td className={r.today_points > 0 ? "up" : ""}>{r.today_points > 0 ? `+${fmt(r.today_points)}` : "—"}</td>
+                          <td><b>{fmt(r.total_score)}</b></td>
+                        </tr>
+                      );
+                    })}
+                    {!lbRows.length && <tr><td colSpan={14}>Chưa có dữ liệu.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "scrape" && (
+          <div>
+            <div className="grid grid-3" style={{ marginBottom: 18 }}>
+              <div className="stat">
+                <b style={{ color: scrape?.token_set ? "var(--green)" : "var(--red)" }}>
+                  {scrape ? (scrape.token_set ? "Đã kết nối" : "Chưa có token") : "…"}
+                </b>
+                <span>Apify API token</span>
+                {scrape && !scrape.token_set && <span className="tr down">Dán APIFY_TOKEN vào .env.local rồi khởi động lại</span>}
+              </div>
+              <div className="stat">
+                <b>{scrape ? `${scrape.channels_scanned_today}/${scrape.channels_total}` : "…"}</b>
+                <span>Kênh đã quét hôm nay</span>
+              </div>
+              <div className="stat">
+                <b>${scrape ? (scrape.cost.today ?? 0).toFixed(2) : "…"}</b>
+                <span>Chi phí Apify hôm nay (30 ngày: ${scrape ? (scrape.cost.last_30d ?? 0).toFixed(2) : "…"})</span>
+              </div>
+            </div>
+
+            <div className="card" style={{ marginBottom: 18 }}>
+              <h3>
+                📡 Cấu hình Actor theo nền tảng
+                <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                  <button className="btn-ghost btn-sm" disabled={scrapeBusy} onClick={() => scrapeAction("scrape")}>
+                    {scrapeBusy ? "Đang chạy…" : "▶ Quét ngay"}
+                  </button>
+                  <button className="btn-ghost btn-sm" disabled={scrapeBusy} onClick={() => scrapeAction("score")}>
+                    🧮 Tính điểm lại hôm nay
+                  </button>
+                </span>
+              </h3>
+              <div className="table-scroll">
+                <table>
+                  <thead><tr><th>Nền tảng</th><th>Apify Actor</th><th>Trạng thái</th><th></th></tr></thead>
+                  <tbody>
+                    {(scrape?.configs ?? []).map((cfg: any) => (
+                      <tr key={cfg.platform}>
+                        <td><b>{cfg.platform}</b></td>
+                        <td style={{ fontFamily: "monospace", fontSize: 12 }}>{cfg.apify_actor}</td>
+                        <td><span className={`pill ${cfg.is_active ? "pill-live" : "pill-done"}`}>{cfg.is_active ? "Đang bật" : "Đang tắt"}</span></td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          <button className="btn-ghost btn-sm" onClick={() => editActor(cfg)}>Đổi Actor</button>{" "}
+                          <button className="btn-ghost btn-sm" onClick={() => togglePlatform(cfg)}>{cfg.is_active ? "Tắt" : "Bật"}</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {scrape && !scrape.configs?.length && (
+                      <tr><td colSpan={4}>Chưa có cấu hình — chạy file supabase/seed.sql để nạp Actor mặc định.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mini-note" style={{ marginTop: 10 }}>
+                Lịch tự động: quét 05:30, tính điểm 06:00 giờ VN. Webhook nhận kết quả:{" "}
+                <code>{scrape?.app_url}/api/apify-callback</code>
+                {scrape && !scrape.webhook_secret_set && <b style={{ color: "var(--red)" }}> — chưa đặt APIFY_WEBHOOK_SECRET!</b>}
+              </p>
+            </div>
+
+            <div className="two-col" style={{ marginBottom: 18 }}>
+              <div className="card">
+                <h3>⚠️ Kênh chưa quét được hôm nay ({scrape?.not_scanned?.length ?? 0})</h3>
+                {(scrape?.not_scanned ?? []).slice(0, 15).map((c: any) => (
+                  <p key={c.id} style={{ fontSize: 12.5, marginBottom: 5 }}>
+                    <b>{c.platform}</b> @{c.username} · {c.student ?? "—"}{" "}
+                    <span className={`st ${c.status === "verified" ? "st-ok" : "st-wait"}`} style={{ fontSize: 10 }}>{c.status}</span>
+                  </p>
+                ))}
+                {scrape && !scrape.not_scanned?.length && <p className="mini-note">Tất cả kênh đã có số liệu hôm nay ✓</p>}
+              </div>
+              <div className="card">
+                <h3>🚩 Kênh bị gắn cờ gian lận ({scrape?.flagged?.length ?? 0})</h3>
+                {(scrape?.flagged ?? []).map((c: any) => (
+                  <p key={c.id} style={{ fontSize: 12.5, marginBottom: 5 }}>
+                    <b>{c.platform}</b> @{c.username} · {c.student ?? "—"} — xử lý trong Hồ sơ học viên (xác minh tay để mở lại)
+                  </p>
+                ))}
+                {scrape && !scrape.flagged?.length && <p className="mini-note">Không có kênh nào bị gắn cờ ✓</p>}
+              </div>
+            </div>
+
+            <div className="card">
+              <h3>🗂 20 run Apify gần nhất</h3>
+              <div className="table-scroll">
+                <table>
+                  <thead><tr><th>Thời điểm</th><th>Nền tảng</th><th>Actor</th><th>Kênh</th><th>Trạng thái</th><th>Chi phí</th></tr></thead>
+                  <tbody>
+                    {(scrape?.runs ?? []).map((r: any) => (
+                      <tr key={r.id}>
+                        <td>{new Date(r.started_at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</td>
+                        <td><b>{r.platform}</b></td>
+                        <td style={{ fontFamily: "monospace", fontSize: 12 }}>{r.actor}</td>
+                        <td>{r.channels_count ?? "—"}</td>
+                        <td>
+                          <span className={`pill ${r.status === "succeeded" ? "pill-live" : r.status === "failed" ? "pill-warn" : "pill-soon"}`}>
+                            {r.status === "succeeded" ? "Thành công" : r.status === "failed" ? "Lỗi" : "Đang chạy"}
+                          </span>
+                        </td>
+                        <td>{r.cost_usd != null ? `$${Number(r.cost_usd).toFixed(3)}` : "—"}</td>
+                      </tr>
+                    ))}
+                    {scrape && !scrape.runs?.length && <tr><td colSpan={6}>Chưa có run nào. Bấm "Quét ngay" để chạy thử.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

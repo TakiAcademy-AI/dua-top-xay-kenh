@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
-import { Lane, LBRow, METRIC_LABEL, PF_ICON, SiteHeader, useToast } from "@/components/ui";
+import { Lane, LBRow, METRIC_LABEL, PF_ICON, ProfileModal, SiteHeader, useToast } from "@/components/ui";
 
 type Me = {
   student: { public_id: string; full_name: string; class_name: string | null };
@@ -11,7 +11,7 @@ type Me = {
   stats: {
     followers7: number; views7: number; videos7: number;
     followers7prev: number; views7prev: number;
-    latestFollowers: Record<string, number | null>;
+    latestByChannel: Record<string, { followers: number | null; total_views: number | null; videos_count: number | null; snapshot_date: string } | null>;
   };
   participations: {
     campaign_id: string; campaign_name: string; campaign_status: string;
@@ -44,6 +44,8 @@ export default function DashboardPage() {
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [newChan, setNewChan] = useState({ platform: "tiktok", url: "" });
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [detailRows, setDetailRows] = useState<any[] | null>(null);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/me");
@@ -131,13 +133,20 @@ export default function DashboardPage() {
               </h3>
               {me.channels.map((c) => {
                 const pf = PF_ICON[c.platform] ?? PF_ICON.tiktok;
-                const followers = me.stats.latestFollowers[c.id];
+                const snap = me.stats.latestByChannel[c.id];
+                const statParts = snap
+                  ? [
+                      snap.followers != null ? `${fmt(snap.followers)} follower` : null,
+                      snap.total_views != null ? `${fmt(snap.total_views)} view` : null,
+                      snap.videos_count != null ? `${fmt(snap.videos_count)} video` : null,
+                    ].filter(Boolean).join(" · ")
+                  : "chờ quét lần đầu";
                 return (
                   <div className="chan" key={c.id}>
                     <div className={`pf ${pf.cls}`}>{pf.icon}</div>
                     <div className="u">
                       <b>@{c.username}</b>
-                      <span>{pf.label}{followers != null ? ` · ${fmt(followers)} follower` : " · chờ quét lần đầu"}</span>
+                      <span>{pf.label} · {statParts}</span>
                     </div>
                     {c.status === "verified" && <span className="st st-ok">Đã xác minh</span>}
                     {c.status === "pending" && <span className="st st-wait">Chờ xác minh</span>}
@@ -183,18 +192,31 @@ export default function DashboardPage() {
             </h3>
             {rows.length ? (
               <div>
-                {others.map((r) => <Lane key={r.student_id} row={r} max={max} />)}
-                {myRow && <Lane row={{ ...myRow }} max={max} me />}
+                {others.map((r) => <Lane key={r.student_id} row={r} max={max} onClick={() => setProfileId(r.public_id)} />)}
+                {myRow && <Lane row={{ ...myRow }} max={max} me onClick={() => setProfileId(myRow.public_id)} />}
               </div>
             ) : (
               <p className="mini-note">Chưa có điểm — bảng xếp hạng xuất hiện sau chu kỳ tính điểm đầu tiên.</p>
             )}
             <p className="mini-note" style={{ marginTop: 12 }}>
-              Điểm cập nhật 6:00 sáng mỗi ngày từ dữ liệu kênh thật.{" "}
-              <button className="btn-ghost btn-sm" onClick={openHistory} style={{ marginLeft: 6 }}>
-                Xem lịch sử cộng điểm
-              </button>
+              Điểm cập nhật 6:00 sáng mỗi ngày từ dữ liệu kênh thật.
+              {part?.updated_on ? ` Cập nhật gần nhất: 06:00 ngày ${part.updated_on.split("-").reverse().join("/")}.` : ""}
+              {" "}Bấm vào từng học viên để xem hồ sơ kênh.
             </p>
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button className="btn-ghost btn-sm" onClick={openHistory}>Lịch sử cộng điểm của tôi</button>
+              <button
+                className="btn-ghost btn-sm"
+                onClick={async () => {
+                  if (!part) return;
+                  const r = await fetch(`/api/leaderboard?campaign_id=${part.campaign_id}&detail=1`);
+                  const d = await r.json();
+                  setDetailRows(d.rows ?? []);
+                }}
+              >
+                Bảng điểm chi tiết
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -217,6 +239,44 @@ export default function DashboardPage() {
               <input value={newChan.url} onChange={(e) => setNewChan({ ...newChan, url: e.target.value })} placeholder="Dán link kênh" />
             </div>
             <button className="btn" onClick={addChannel}>Thêm kênh</button>
+          </div>
+        </div>
+      )}
+
+      {profileId && <ProfileModal publicId={profileId} onClose={() => setProfileId(null)} />}
+
+      {detailRows && (
+        <div className="modal-bg" onClick={() => setDetailRows(null)}>
+          <div className="modal" style={{ maxWidth: 860 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 14 }}>
+              Bảng điểm chi tiết · {part?.campaign_name}
+            </h3>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Hạng</th><th>Học viên</th><th>Follower</th><th>Lượt xem</th><th>Video</th>
+                    <th>Tương tác</th><th>Chuyên cần</th><th>Hôm nay</th><th>Tổng</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailRows.map((r: any) => (
+                    <tr key={r.student_id} style={r.public_id === me.student.public_id ? { background: "var(--orange-soft)" } : undefined}>
+                      <td><b>{r.rank ?? "—"}</b></td>
+                      <td>{r.name} <span className="mini-note">{r.public_id}</span></td>
+                      <td>{fmt(r.breakdown?.follower ?? 0)}</td>
+                      <td>{fmt(r.breakdown?.views ?? 0)}</td>
+                      <td>{fmt(r.breakdown?.new_video ?? 0)}</td>
+                      <td>{fmt(r.breakdown?.engagement ?? 0)}</td>
+                      <td>{fmt(r.breakdown?.weekly_bonus ?? 0)}</td>
+                      <td className={r.today_points > 0 ? "up" : ""}>{r.today_points > 0 ? `+${fmt(r.today_points)}` : "—"}</td>
+                      <td><b>{fmt(r.total_score)}</b></td>
+                    </tr>
+                  ))}
+                  {!detailRows.length && <tr><td colSpan={9}>Chưa có dữ liệu điểm.</td></tr>}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

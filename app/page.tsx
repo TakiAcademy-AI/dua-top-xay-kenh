@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Countdown, Lane, LBRow, Podium, SiteHeader, useToast } from "@/components/ui";
+import { Countdown, Lane, LBRow, Podium, ProfileModal, SiteHeader, useToast } from "@/components/ui";
 
 type OpenCampaign = {
   id: string;
@@ -31,6 +31,7 @@ export default function RegisterPage() {
   const [otpMode, setOtpMode] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [profileId, setProfileId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/me").then((r) => { if (r.ok) router.replace("/dashboard"); }).catch(() => {});
@@ -190,7 +191,7 @@ export default function RegisterPage() {
             {rows.length ? (
               <>
                 <Podium rows={rows.slice(0, 3)} />
-                <div>{rows.slice(3, 10).map((r) => <Lane key={r.student_id} row={r} max={max} />)}</div>
+                <div>{rows.slice(3, 10).map((r) => <Lane key={r.student_id} row={r} max={max} onClick={() => setProfileId(r.public_id)} />)}</div>
               </>
             ) : (
               <p className="mini-note">Chưa có dữ liệu xếp hạng. Điểm cập nhật 6:00 sáng mỗi ngày.</p>
@@ -198,6 +199,7 @@ export default function RegisterPage() {
           </div>
         </div>
       </div>
+      {profileId && <ProfileModal publicId={profileId} onClose={() => setProfileId(null)} />}
       {toastNode}
     </>
   );
