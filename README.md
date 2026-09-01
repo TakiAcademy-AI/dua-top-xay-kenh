@@ -1,0 +1,70 @@
+# ĐUA TOP XÂY KÊNH — TAKI ACADEMY
+
+Nền tảng thi đua xây kênh social cho học viên TAKI ACADEMY. Học viên đăng ký kênh vào chiến dịch đua top theo lớp; hệ thống quét số liệu kênh mỗi ngày qua Apify, tính điểm theo công thức admin cấu hình, hiển thị bảng xếp hạng trực tiếp.
+
+Build theo `dac-ta-phan-mem.md` phiên bản 1.0 (01/09/2026). Giao diện bám 2 file thiết kế `hoc-vien.html` và `admin.html`.
+
+## Stack
+
+- Next.js 14 (App Router) + Tailwind CSS + font Montserrat
+- Supabase (Postgres, RLS khóa toàn bộ với anon — mọi truy cập qua API service role)
+- Apify (async run + webhook) — TikTok, YouTube bật sẵn; Instagram, Facebook đã cài mapper, bật bằng cách sửa `platform_configs`
+- Vercel Cron: quét 05:30, chốt điểm 06:00 giờ VN (đã khai trong `vercel.json` theo giờ UTC)
+
+## Cài đặt lần đầu (3 bước)
+
+**Bước 1 — Tạo database:** vào [supabase.com](https://supabase.com) tạo project mới, mở **SQL Editor**, chạy lần lượt 2 file:
+1. `supabase/migrations/0001_schema.sql`
+2. `supabase/seed.sql` (3 lớp mẫu + cấu hình Actor + 1 chiến dịch mẫu đang chạy)
+
+**Bước 2 — Dán key:** mở file `.env.local`, làm theo hướng dẫn ghi ngay trong file (Supabase URL + service_role key, Apify token, tự đặt mật khẩu admin và các secret).
+
+**Bước 3 — Chạy:**
+
+```bash
+cd ~/projects/dua-top-xay-kenh && npm run dev
+```
+
+- Học viên: http://localhost:3300
+- Admin: http://localhost:3300/admin (mật khẩu = `ADMIN_PASSWORD` trong `.env.local`)
+
+## Luồng vận hành hàng ngày
+
+1. **05:30** — `/api/cron/daily-scrape`: gom kênh `pending` + `verified`, start Apify run theo nền tảng, kèm webhook.
+2. Apify chạy xong gọi `/api/apify-callback` (xác thực secret): chuẩn hóa dữ liệu về schema chung, ghi `channel_snapshots`; kênh `pending` có mã ID trong bio → tự chuyển `verified` + lưu baseline.
+3. **06:00** — `/api/cron/daily-scoring`: so snapshot hôm nay/hôm qua ra delta, nhân trọng số từng chiến dịch, ghi `score_entries`, cập nhật hạng + biến động hạng.
+   - **Idempotent**: chạy lại job cùng ngày sẽ xóa dòng tự động của ngày đó và tính lại — điểm không nhân đôi. Tính lại ngày cũ: `/api/cron/daily-scoring?date=2026-09-01&secret=...`
+   - Kênh quét lỗi: giữ điểm hôm qua, không chặn kênh khác, liệt kê trong report trả về (`scrapeFailed`).
+4. Chống gian lận: follower tăng > 5× trung bình 7 ngày và tương tác/follower dưới ngưỡng → kênh chuyển `flagged`, treo điểm ngày đó chờ admin duyệt lại (xác minh tay trong hồ sơ học viên).
+
+Chạy tay để test (thay secret của Sếp):
+
+```bash
+curl "http://localhost:3300/api/cron/daily-scoring?secret=CRON_SECRET_CUA_SEP"
+```
+
+## Deploy Vercel
+
+1. Push repo lên GitHub, import vào Vercel.
+2. Khai đủ biến trong `.env.local` vào Vercel Environment Variables, đổi `APP_URL` thành domain thật và `OTP_DEV_MODE=false`.
+3. Cron đã khai sẵn trong `vercel.json` (22:30 và 23:00 UTC = 05:30 và 06:00 giờ VN).
+
+## Những gì V1 này CHƯA có (đúng lộ trình đặc tả)
+
+- Gửi OTP qua Zalo OA/SMS thật — hiện mã in ra log server (dev mode hiện trên màn hình). Điểm nối đã đánh dấu `TODO` trong `app/api/auth/otp/route.ts`.
+- Retry quét 3 lần cách 15 phút — hiện lỗi quét được ghi nhận và bỏ qua an toàn (điểm giữ nguyên); retry tự động cần queue, để V1.1.
+- Thông báo Zalo, huy hiệu, màn trình chiếu sự kiện, vai trò trợ giảng — V2 theo lộ trình.
+- Mapper dữ liệu Apify viết theo cấu trúc dataset phổ biến của 4 Actor khuyến nghị — **cần chạy thử 1 run thật và đối chiếu**, vì Actor bên thứ ba có thể đổi format. Đổi Actor: sửa bảng `platform_configs`, không cần sửa code.
+
+## Cấu trúc chính
+
+```
+app/page.tsx              Trang đăng ký + BXH public
+app/dashboard/page.tsx    Dashboard học viên (thẻ ID + QR, kênh, chỉ số 7 ngày, đường đua, lịch sử điểm)
+app/admin/page.tsx        Admin 4 tab: Chiến dịch / Tạo chiến dịch / Học viên / BXH + xuất Excel
+app/api/...               17 endpoint theo mục 6 đặc tả
+lib/scoring.ts            Công thức điểm + chuẩn hóa baseline + chống gian lận + xếp hạng
+lib/apify.ts              Start run, webhook, chuẩn hóa dataset 4 nền tảng, xác minh bio
+lib/channels.ts           Whitelist domain + bóc username từ link
+supabase/                 Schema + seed
+```
