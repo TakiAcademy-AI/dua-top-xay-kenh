@@ -161,6 +161,21 @@ export default function AdminPage() {
     toast(`Đã tạo lớp "${d.class.name}" và chọn sẵn cho chiến dịch`);
   }
 
+  async function deleteSelectedClasses() {
+    const targets = classes.filter((c) => form.class_ids.includes(c.id));
+    if (!targets.length) { toast("Bấm chọn lớp cần xóa trong danh sách trước đã"); return; }
+    const names = targets.map((c) => `"${c.name}"`).join(", ");
+    if (!confirm(`Xóa ${targets.length} lớp: ${names}?\nLớp đã có học viên hoặc chiến dịch sẽ chỉ bị ẩn đi, không mất dữ liệu.`)) return;
+    for (const c of targets) {
+      const r = await fetch(`/api/admin/classes/${c.id}`, { method: "DELETE" });
+      const d = await r.json();
+      if (!r.ok) { toast(d.error ?? `Không xóa được lớp "${c.name}"`); continue; }
+      setClasses((prev) => prev.filter((x) => x.id !== c.id));
+      setForm((f) => ({ ...f, class_ids: f.class_ids.filter((id) => id !== c.id) }));
+      toast(d.deleted ? `Đã xóa lớp "${c.name}"` : `Lớp "${c.name}" đang có ${d.students} học viên, ${d.campaigns} chiến dịch — đã ẩn khỏi danh sách`);
+    }
+  }
+
   async function createCampaign() {
     const body = {
       name: form.name,
@@ -371,11 +386,12 @@ export default function AdminPage() {
                     onChange={(e) => setForm({ ...form, class_ids: Array.from(e.target.selectedOptions).map((o) => o.value) })}>
                     {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginTop: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, marginTop: 8 }}>
                     <input value={newClassName} placeholder="Chưa có lớp? Nhập tên lớp mới, ví dụ: Minh Trí Kim Cương K13"
                       onChange={(e) => setNewClassName(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") createClass(); }} />
                     <button className="btn-ghost btn-sm" onClick={createClass}>+ Thêm lớp</button>
+                    <button className="btn-ghost btn-sm btn-danger" onClick={deleteSelectedClasses}>🗑 Xóa lớp đang chọn</button>
                   </div>
                 </div>
               )}
