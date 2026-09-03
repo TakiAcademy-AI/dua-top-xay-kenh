@@ -52,6 +52,7 @@ export default function AdminPage() {
     weekly_quota: "5",
     weights: { follower: "10", per_1000_views: "5", new_video: "20", engagement: "2", weekly_bonus: "100" },
   });
+  const [newClassName, setNewClassName] = useState("");
   // Modal sửa giải thưởng (sửa được mọi lúc, kể cả khi đang chạy)
   const [prizeEdit, setPrizeEdit] = useState<{ camp: Campaign; rows: Prize[] } | null>(null);
 
@@ -144,6 +145,20 @@ export default function AdminPage() {
     });
     if (r.ok) { setAuthed(true); loadCampaigns(); }
     else toast((await r.json()).error ?? "Sai mật khẩu");
+  }
+
+  async function createClass() {
+    const name = newClassName.trim();
+    if (!name) { toast("Nhập tên lớp trước đã"); return; }
+    const r = await fetch("/api/admin/classes", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+    });
+    const d = await r.json();
+    if (!r.ok) { toast(d.error ?? "Không tạo được lớp"); return; }
+    setClasses((prev) => [...prev, d.class].sort((a, b) => a.name.localeCompare(b.name, "vi")));
+    setForm((f) => ({ ...f, class_ids: [...f.class_ids, d.class.id] }));
+    setNewClassName("");
+    toast(`Đã tạo lớp "${d.class.name}" và chọn sẵn cho chiến dịch`);
   }
 
   async function createCampaign() {
@@ -355,7 +370,14 @@ export default function AdminPage() {
                   <select multiple size={3} value={form.class_ids}
                     onChange={(e) => setForm({ ...form, class_ids: Array.from(e.target.selectedOptions).map((o) => o.value) })}>
                     {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select></div>
+                  </select>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginTop: 8 }}>
+                    <input value={newClassName} placeholder="Chưa có lớp? Nhập tên lớp mới, ví dụ: Minh Trí Kim Cương K13"
+                      onChange={(e) => setNewClassName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") createClass(); }} />
+                    <button className="btn-ghost btn-sm" onClick={createClass}>+ Thêm lớp</button>
+                  </div>
+                </div>
               )}
               <div className="two-col">
                 <div className="field"><label>Ngày bắt đầu</label>
