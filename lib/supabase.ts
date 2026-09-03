@@ -10,6 +10,13 @@ export function supabaseAdmin(): SupabaseClient {
   if (!url || !key) {
     throw new Error("Thiếu NEXT_PUBLIC_SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY trong .env.local");
   }
-  cached = createClient(url, key, { auth: { persistSession: false } });
+  cached = createClient(url, key, {
+    auth: { persistSession: false },
+    global: {
+      // Next.js App Router cache mặc định các fetch GET (Data Cache) khiến API đọc DB
+      // trả dữ liệu cũ dù route đã force-dynamic. Ép no-store cho mọi truy vấn Supabase.
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
+  });
   return cached;
 }
