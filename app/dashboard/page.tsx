@@ -255,8 +255,9 @@ export default function DashboardPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Hạng</th><th>Học viên</th><th>Follower</th><th>Lượt xem</th><th>Video</th>
-                    <th>Tương tác</th><th>Chuyên cần</th><th>Hôm nay</th><th>Tổng</th>
+                    <th>Hạng</th><th>Học viên</th><th>Follower kênh</th><th>View kênh</th>
+                    <th>Đ.Follower</th><th>Đ.Lượt xem</th><th>Đ.Video</th>
+                    <th>Đ.Tương tác</th><th>Chuyên cần</th><th>Hôm nay</th><th>Tổng</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -264,6 +265,8 @@ export default function DashboardPage() {
                     <tr key={r.student_id} style={r.public_id === me.student.public_id ? { background: "var(--orange-soft)" } : undefined}>
                       <td><b>{r.rank ?? "—"}</b></td>
                       <td>{r.name} <span className="mini-note">{r.public_id}</span></td>
+                      <td><b>{fmt(r.channel_followers ?? 0)}</b></td>
+                      <td><b>{fmt(r.channel_views ?? 0)}</b></td>
                       <td>{fmt(r.breakdown?.follower ?? 0)}</td>
                       <td>{fmt(r.breakdown?.views ?? 0)}</td>
                       <td>{fmt(r.breakdown?.new_video ?? 0)}</td>
@@ -273,7 +276,7 @@ export default function DashboardPage() {
                       <td><b>{fmt(r.total_score)}</b></td>
                     </tr>
                   ))}
-                  {!detailRows.length && <tr><td colSpan={9}>Chưa có dữ liệu điểm.</td></tr>}
+                  {!detailRows.length && <tr><td colSpan={11}>Chưa có dữ liệu điểm.</td></tr>}
                 </tbody>
               </table>
             </div>

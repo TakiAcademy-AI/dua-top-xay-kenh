@@ -514,7 +514,8 @@ export default function AdminPage() {
                   <thead>
                     <tr>
                       <th>Hạng</th><th>±</th><th>ID</th><th>Học viên</th><th>Lớp</th><th>Kênh ✓</th>
-                      <th>Follower</th><th>Lượt xem</th><th>Video</th><th>Tương tác</th>
+                      <th>Follower kênh</th><th>View kênh</th>
+                      <th>Đ.Follower</th><th>Đ.Lượt xem</th><th>Đ.Video</th><th>Đ.Tương tác</th>
                       <th>Chuyên cần</th><th>Điều chỉnh</th><th>Hôm nay</th><th>Tổng</th>
                     </tr>
                   </thead>
@@ -529,6 +530,8 @@ export default function AdminPage() {
                           <td>{r.name}</td>
                           <td>{r.class_name ?? "—"}</td>
                           <td>{r.verified_channels ?? 0}</td>
+                          <td><b>{fmt(r.channel_followers ?? 0)}</b></td>
+                          <td><b>{fmt(r.channel_views ?? 0)}</b></td>
                           <td>{fmt(r.breakdown?.follower ?? 0)}</td>
                           <td>{fmt(r.breakdown?.views ?? 0)}</td>
                           <td>{fmt(r.breakdown?.new_video ?? 0)}</td>
@@ -540,7 +543,7 @@ export default function AdminPage() {
                         </tr>
                       );
                     })}
-                    {!lbRows.length && <tr><td colSpan={14}>Chưa có dữ liệu.</td></tr>}
+                    {!lbRows.length && <tr><td colSpan={16}>Chưa có dữ liệu.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -705,8 +708,10 @@ export default function AdminPage() {
                 <div className="u">
                   <b>{c.platform} · @{c.username}</b>
                   <span>
-                    Baseline: {c.baseline_followers != null ? fmt(c.baseline_followers) : "—"} fl ·
-                    Mới nhất: {c.latest?.followers != null ? fmt(c.latest.followers) : "chưa quét"}
+                    {c.latest
+                      ? `${c.latest.followers != null ? fmt(c.latest.followers) : "—"} follower · ${c.latest.total_views != null ? fmt(Number(c.latest.total_views)) : "—"} view · ${c.latest.videos_count != null ? fmt(c.latest.videos_count) : "—"} video (${String(c.latest.snapshot_date).split("-").reverse().join("/")})`
+                      : "chưa quét lần nào"}
+                    {" · "}Baseline: {c.baseline_followers != null ? fmt(c.baseline_followers) : "—"} fl / {c.baseline_views != null ? fmt(Number(c.baseline_views)) : "—"} view
                   </span>
                 </div>
                 {c.status === "verified" ? <span className="st st-ok">Đã xác minh</span>
