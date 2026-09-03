@@ -1,0 +1,117 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Countdown, Lane, LBRow, Podium, ProfileModal, SiteHeader } from "@/components/ui";
+
+type ClassData = {
+  class: { id: string; name: string; code: string; students: number };
+  campaigns: { id: string; name: string; prize: string | null; status: string; start_date: string; end_date: string }[];
+  primary_campaign: { id: string; name: string; prize: string | null; end_date: string; registration_deadline: string | null } | null;
+  leaderboard: LBRow[];
+};
+
+const dmy = (d: string) => d.split("-").reverse().join("/");
+const STATUS_LABEL: Record<string, [string, string]> = {
+  running: ["pill-live", "Đang chạy"],
+  open: ["pill-soon", "Mở đăng ký"],
+  paused: ["pill-warn", "Tạm dừng"],
+  finished: ["pill-done", "Đã kết thúc"],
+  draft: ["pill-soon", "Nháp"],
+};
+
+export default function ClassPage({ params }: { params: { code: string } }) {
+  const [data, setData] = useState<ClassData | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [profileId, setProfileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/classes/${encodeURIComponent(params.code)}`)
+      .then(async (r) => {
+        if (!r.ok) { setNotFound(true); return; }
+        setData(await r.json());
+      })
+      .catch(() => setNotFound(true));
+  }, [params.code]);
+
+  const max = data?.leaderboard[0]?.total_score ?? 0;
+
+  return (
+    <>
+      <SiteHeader
+        subtitle="TAKI ACADEMY"
+        right={
+          <nav className="hd-links">
+            <a href="/">Trang chủ</a>
+            <a className="cta" href={data ? `/dang-ky?class=${data.class.id}` : "/dang-ky"}>Vào đua lớp này</a>
+          </nav>
+        }
+      />
+      <div className="wrap">
+        {notFound && (
+          <div className="card"><p className="mini-note">Không tìm thấy lớp này. <a href="/">← Về trang chủ</a></p></div>
+        )}
+        {data && (
+          <>
+            <div className="hero">
+              <span className="tag">ĐƯỜNG ĐUA CỦA LỚP</span>
+              <h1>{data.class.name}</h1>
+              <p>
+                {data.class.students.toLocaleString("vi-VN")} học viên đã ghi danh
+                {data.primary_campaign ? ` · Chiến dịch đang chạy: ${data.primary_campaign.name}` : " · Chưa có chiến dịch đang chạy"}
+                {data.primary_campaign?.prize ? ` · 🎁 ${data.primary_campaign.prize}` : ""}
+              </p>
+              {data.primary_campaign && (
+                <div className="meta">
+                  <div>
+                    <span>Kết thúc sau</span>
+                    <Countdown endDate={data.primary_campaign.end_date} />
+                  </div>
+                  {data.primary_campaign.registration_deadline && (
+                    <div><b>{dmy(data.primary_campaign.registration_deadline)}</b><span>hạn chốt đăng ký kênh</span></div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="grid g2h">
+              <div className="card">
+                <h3>🏆 Bảng xếp hạng{data.primary_campaign ? ` · ${data.primary_campaign.name}` : ""}</h3>
+                {data.leaderboard.length ? (
+                  <>
+                    <Podium rows={data.leaderboard.slice(0, 3)} />
+                    {data.leaderboard.slice(3, 20).map((r) => (
+                      <Lane key={r.student_id} row={r} max={max} onClick={() => setProfileId(r.public_id)} />
+                    ))}
+                  </>
+                ) : (
+                  <p className="mini-note">Chưa có điểm — bảng xếp hạng xuất hiện sau chu kỳ tính điểm đầu tiên (06:00 hàng ngày).</p>
+                )}
+              </div>
+
+              <div className="card">
+                <h3>📋 Chiến dịch của lớp</h3>
+                {data.campaigns.map((c) => {
+                  const pill = STATUS_LABEL[c.status] ?? ["pill-done", c.status];
+                  return (
+                    <div className="class-row" key={c.id}>
+                      <div className="nm">
+                        <b>{c.name}</b>
+                        <span>{dmy(c.start_date)} – {dmy(c.end_date)}{c.prize ? ` · 🎁 ${c.prize}` : ""}</span>
+                      </div>
+                      <span className={`pill ${pill[0]}`}>{pill[1]}</span>
+                    </div>
+                  );
+                })}
+                {!data.campaigns.length && <p className="mini-note">Lớp chưa có chiến dịch nào.</p>}
+                <a className="btn btn-link" style={{ marginTop: 14 }} href={`/dang-ky?class=${data.class.id}`}>
+                  Đăng ký vào đường đua của lớp
+                </a>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+      {profileId && <ProfileModal publicId={profileId} onClose={() => setProfileId(null)} />}
+    </>
+  );
+}
