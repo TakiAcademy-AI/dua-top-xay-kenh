@@ -21,7 +21,7 @@ export async function GET() {
   // ===== Chiến dịch đang mở/chạy + lớp =====
   const { data: camps } = await db
     .from("campaigns")
-    .select("id, name, prize, scope, status, start_date, end_date, registration_deadline, campaign_classes(classes(id, name, code))")
+    .select("id, name, prize, prizes, scope, status, start_date, end_date, registration_deadline, campaign_classes(classes(id, name, code))")
     .in("status", ["open", "running"])
     .order("start_date", { ascending: false });
   const campIds = (camps ?? []).map((c) => c.id);
@@ -84,7 +84,7 @@ export async function GET() {
     const chCount = cp.reduce((s, p) => s + (channelsByStudent.get(p.student_id) ?? 0), 0);
     const classes = (c.campaign_classes ?? []).map((cc: any) => cc.classes).filter(Boolean);
     return {
-      id: c.id, name: c.name, prize: c.prize, scope: c.scope, status: c.status,
+      id: c.id, name: c.name, prize: c.prize, prizes: c.prizes ?? [], scope: c.scope, status: c.status,
       start_date: c.start_date, end_date: c.end_date, registration_deadline: c.registration_deadline,
       class_names: classes.map((x: any) => x.name),
       class_codes: classes.map((x: any) => x.code).filter(Boolean),

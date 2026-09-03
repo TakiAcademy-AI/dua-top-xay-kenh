@@ -3,12 +3,18 @@
 import { useEffect, useState } from "react";
 import { Countdown, Lane, LBRow, Podium, ProfileModal, SiteHeader } from "@/components/ui";
 
+type Prize = { label: string; reward: string };
 type ClassData = {
   class: { id: string; name: string; code: string; students: number };
-  campaigns: { id: string; name: string; prize: string | null; status: string; start_date: string; end_date: string }[];
-  primary_campaign: { id: string; name: string; prize: string | null; end_date: string; registration_deadline: string | null } | null;
+  campaigns: { id: string; name: string; prize: string | null; prizes: Prize[]; status: string; start_date: string; end_date: string }[];
+  primary_campaign: { id: string; name: string; prize: string | null; prizes: Prize[]; end_date: string; registration_deadline: string | null } | null;
   leaderboard: LBRow[];
 };
+
+function prizeList(prizes: Prize[] | undefined, prize: string | null): Prize[] {
+  if (prizes?.length) return prizes;
+  return prize ? [{ label: "Giải thưởng", reward: prize }] : [];
+}
 
 const dmy = (d: string) => d.split("-").reverse().join("/");
 const STATUS_LABEL: Record<string, [string, string]> = {
@@ -58,7 +64,6 @@ export default function ClassPage({ params }: { params: { code: string } }) {
               <p>
                 {data.class.students.toLocaleString("vi-VN")} học viên đã ghi danh
                 {data.primary_campaign ? ` · Chiến dịch đang chạy: ${data.primary_campaign.name}` : " · Chưa có chiến dịch đang chạy"}
-                {data.primary_campaign?.prize ? ` · 🎁 ${data.primary_campaign.prize}` : ""}
               </p>
               {data.primary_campaign && (
                 <div className="meta">
@@ -89,6 +94,18 @@ export default function ClassPage({ params }: { params: { code: string } }) {
               </div>
 
               <div className="card">
+                {data.primary_campaign && prizeList(data.primary_campaign.prizes, data.primary_campaign.prize).length > 0 && (
+                  <>
+                    <h3>🎁 Cơ cấu giải thưởng</h3>
+                    {prizeList(data.primary_campaign.prizes, data.primary_campaign.prize).map((p, i) => (
+                      <div className="feed-item" key={i}>
+                        <div className="ic">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "🎖"}</div>
+                        <div><b>{p.label}</b><span className="t">{p.reward}</span></div>
+                      </div>
+                    ))}
+                    <div style={{ height: 16 }} />
+                  </>
+                )}
                 <h3>📋 Chiến dịch của lớp</h3>
                 {data.campaigns.map((c) => {
                   const pill = STATUS_LABEL[c.status] ?? ["pill-done", c.status];

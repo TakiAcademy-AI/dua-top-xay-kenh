@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ProfileModal, SiteHeader, initials } from "@/components/ui";
 
 type HomeCampaign = {
-  id: string; name: string; prize: string | null; scope: string; status: string;
+  id: string; name: string; prize: string | null; prizes: { label: string; reward: string }[]; scope: string; status: string;
   start_date: string; end_date: string; registration_deadline: string | null;
   class_names: string[]; class_codes: string[];
   participants: number; channels: number;
@@ -106,7 +106,18 @@ export default function HomePage() {
                     </span>
                   </div>
                   <h3>{c.name}</h3>
-                  {c.prize && <p className="prize">🎁 {c.prize}</p>}
+                  {(() => {
+                    const list = c.prizes?.length ? c.prizes : c.prize ? [{ label: "Giải thưởng", reward: c.prize }] : [];
+                    if (!list.length) return null;
+                    return (
+                      <div>
+                        {list.slice(0, 2).map((p, i) => (
+                          <p className="prize" key={i}>🎁 <b>{p.label}:</b> {p.reward}</p>
+                        ))}
+                        {list.length > 2 && <p className="prize">… và {list.length - 2} giải khác</p>}
+                      </div>
+                    );
+                  })()}
                   <div className="nums">
                     <div><b>{fmt(c.participants)}</b><span>học viên</span></div>
                     <div><b>{fmt(c.channels)}</b><span>kênh</span></div>

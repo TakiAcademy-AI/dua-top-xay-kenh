@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireAdmin, jsonError } from "@/lib/api";
+import { sanitizePrizes } from "@/lib/prizes";
 
 export const dynamic = "force-dynamic";
 
@@ -36,14 +37,31 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ ok: true, status: t.to });
   }
 
-  // Sửa thông tin / công thức
-  if (!["draft", "open"].includes(camp.status)) {
-    return jsonError("Chiến dịch đã bắt đầu — công thức và thông tin bị đóng băng. Muốn sửa phải kết thúc chiến dịch.");
-  }
+  // Giải thưởng tùy biến được MỌI LÚC — không thuộc luật tính điểm nên không bị đóng băng
+  const prizePatch: Record<string, unknown> = {};
+  if (body.prize !== undefined) prizePatch.prize = body.prize ? String(body.prize).slice(0, 200) : null;
+  if (body.prizes !== undefined) prizePatch.prizes = sanitizePrizes(body.prizes);
+
   const patch: Record<string, unknown> = {};
-  for (const f of ["name", "prize", "start_date", "end_date", "registration_deadline", "weekly_quota", "weights", "normalize_by_baseline"]) {
+  for (const f of ["name", "start_date", "end_date", "registration_deadline", "weekly_quota", "weights", "normalize_by_baseline"]) {
     if (body[f] !== undefined) patch[f] = body[f];
   }
+
+  // Chỉ sửa giải thưởng: áp dụng ngay, bỏ qua kiểm tra đóng băng
+  if (!Object.keys(patch).length && Object.keys(prizePatch).length) {
+    const { error } = await db.from("campaigns").update(prizePatch).eq("id", camp.id);
+    if (error) return jsonError("Không cập nhật được giải thưởng", 500);
+    await db.from("audit_logs").insert({
+      actor_id: "admin", action: "update_campaign_prizes", target_type: "campaign", target_id: camp.id, detail: prizePatch as any,
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  // Sửa thông tin / công thức: chỉ khi chưa bắt đầu
+  if (!["draft", "open"].includes(camp.status)) {
+    return jsonError("Chiến dịch đã bắt đầu — công thức và thông tin bị đóng băng (riêng giải thưởng vẫn sửa được). Muốn sửa luật phải kết thúc chiến dịch.");
+  }
+  Object.assign(patch, prizePatch);
   const start = String(patch.start_date ?? camp.start_date);
   const end = String(patch.end_date ?? camp.end_date);
   if (end <= start) return jsonError("Ngày kết thúc phải sau ngày bắt đầu");

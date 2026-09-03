@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Lane, LBRow, METRIC_LABEL, SiteHeader, useToast } from "@/components/ui";
 
+type Prize = { label: string; reward: string };
 type Campaign = {
   id: string; name: string; scope: string; class_names: string[];
   start_date: string; end_date: string; registration_deadline: string | null;
-  prize: string | null; weights: Record<string, number>; weekly_quota: number;
+  prize: string | null; prizes: Prize[]; weights: Record<string, number>; weekly_quota: number;
   status: string; participants: number;
 };
 type StudentRow = {
@@ -46,10 +47,13 @@ export default function AdminPage() {
   // Form tạo chiến dịch
   const [form, setForm] = useState({
     name: "", scope: "class", class_ids: [] as string[],
-    start_date: "", end_date: "", registration_deadline: "", prize: "",
+    start_date: "", end_date: "", registration_deadline: "",
+    prizes: [{ label: "Top 1", reward: "" }] as Prize[],
     weekly_quota: "5",
     weights: { follower: "10", per_1000_views: "5", new_video: "20", engagement: "2", weekly_bonus: "100" },
   });
+  // Modal sửa giải thưởng (sửa được mọi lúc, kể cả khi đang chạy)
+  const [prizeEdit, setPrizeEdit] = useState<{ camp: Campaign; rows: Prize[] } | null>(null);
 
   const loadCampaigns = useCallback(async () => {
     const r = await fetch("/api/admin/campaigns");
@@ -150,7 +154,7 @@ export default function AdminPage() {
       start_date: form.start_date,
       end_date: form.end_date,
       registration_deadline: form.registration_deadline || null,
-      prize: form.prize,
+      prizes: form.prizes.filter((p) => p.reward.trim()),
       weekly_quota: Number(form.weekly_quota || 0),
       weights: Object.fromEntries(Object.entries(form.weights).map(([k, v]) => [k, Number(v)])),
     };
@@ -175,6 +179,17 @@ export default function AdminPage() {
     const d = await r.json();
     if (r.ok) { toast("Đã cập nhật trạng thái"); loadCampaigns(); }
     else toast(d.error ?? "Không cập nhật được");
+  }
+
+  async function savePrizes() {
+    if (!prizeEdit) return;
+    const r = await fetch(`/api/admin/campaigns/${prizeEdit.camp.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prizes: prizeEdit.rows.filter((p) => p.reward.trim()) }),
+    });
+    const d = await r.json();
+    if (r.ok) { toast("Đã lưu cơ cấu giải thưởng"); setPrizeEdit(null); loadCampaigns(); }
+    else toast(d.error ?? "Không lưu được");
   }
 
   async function openProfile(id: string) {
@@ -266,12 +281,28 @@ export default function AdminPage() {
                       const pill = STATUS_PILL[c.status] ?? ["pill-done", c.status];
                       return (
                         <tr key={c.id}>
-                          <td><b>{c.name}</b>{c.prize ? <div className="mini-note">🎁 {c.prize}</div> : null}</td>
+                          <td>
+                            <b>{c.name}</b>
+                            {c.prizes?.length
+                              ? <div className="mini-note">🎁 {c.prizes.length} giải · {c.prizes[0].label}: {c.prizes[0].reward}</div>
+                              : c.prize ? <div className="mini-note">🎁 {c.prize}</div> : null}
+                          </td>
                           <td>{c.scope === "global" ? "Toàn hệ thống" : c.class_names.join(", ") || "Theo lớp"}</td>
                           <td>{dmy(c.start_date)} – {dmy(c.end_date)}</td>
                           <td>{c.participants || "—"}</td>
                           <td><span className={`pill ${pill[0]}`}>{pill[1]}</span></td>
                           <td style={{ whiteSpace: "nowrap" }}>
+                            <button
+                              className="btn-ghost btn-sm"
+                              onClick={() => setPrizeEdit({
+                                camp: c,
+                                rows: c.prizes?.length ? c.prizes.map((p) => ({ ...p }))
+                                  : c.prize ? [{ label: "Giải thưởng", reward: c.prize }]
+                                  : [{ label: "Top 1", reward: "" }],
+                              })}
+                            >
+                              🎁 Giải
+                            </button>{" "}
                             {c.status === "running" && (
                               <button className="btn-ghost btn-sm" onClick={() => campaignAction(c, "pause")}>Tạm dừng</button>
                             )}{" "}
@@ -320,8 +351,21 @@ export default function AdminPage() {
               </div>
               <div className="field"><label>Hạn chốt đăng ký kênh</label>
                 <input type="date" value={form.registration_deadline} onChange={(e) => setForm({ ...form, registration_deadline: e.target.value })} /></div>
-              <div className="field"><label>Giải thưởng (hiện trên trang đua)</label>
-                <input value={form.prize} onChange={(e) => setForm({ ...form, prize: e.target.value })} placeholder="Ví dụ: Top 1 nhận suất coaching 1:1" /></div>
+              <div className="field">
+                <label>Cơ cấu giải thưởng (hiện trên trang đua, sửa được cả khi đang chạy)</label>
+                {form.prizes.map((p, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "110px 1fr auto", gap: 8, marginBottom: 8 }}>
+                    <input value={p.label} placeholder="Top 1"
+                      onChange={(e) => setForm({ ...form, prizes: form.prizes.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
+                    <input value={p.reward} placeholder="Ví dụ: Suất coaching 1:1 cùng Founder"
+                      onChange={(e) => setForm({ ...form, prizes: form.prizes.map((x, j) => (j === i ? { ...x, reward: e.target.value } : x)) })} />
+                    <button className="btn-ghost btn-sm" onClick={() => setForm({ ...form, prizes: form.prizes.filter((_, j) => j !== i) })}>✕</button>
+                  </div>
+                ))}
+                <button className="btn-ghost btn-sm" onClick={() => setForm({ ...form, prizes: [...form.prizes, { label: `Top ${form.prizes.length + 1}`, reward: "" }] })}>
+                  + Thêm giải
+                </button>
+              </div>
             </div>
 
             <div className="card">
@@ -562,6 +606,32 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {prizeEdit && (
+        <div className="modal-bg" onClick={() => setPrizeEdit(null)}>
+          <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 4 }}>🎁 Cơ cấu giải thưởng</h3>
+            <p className="mini-note" style={{ marginBottom: 14 }}>
+              {prizeEdit.camp.name} · sửa được cả khi chiến dịch đang chạy, hiển thị ngay trên trang đua
+            </p>
+            {prizeEdit.rows.map((p, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "110px 1fr auto", gap: 8, marginBottom: 8 }}>
+                <input value={p.label} placeholder="Top 1"
+                  onChange={(e) => setPrizeEdit({ ...prizeEdit, rows: prizeEdit.rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
+                <input value={p.reward} placeholder="Phần thưởng"
+                  onChange={(e) => setPrizeEdit({ ...prizeEdit, rows: prizeEdit.rows.map((x, j) => (j === i ? { ...x, reward: e.target.value } : x)) })} />
+                <button className="btn-ghost btn-sm" onClick={() => setPrizeEdit({ ...prizeEdit, rows: prizeEdit.rows.filter((_, j) => j !== i) })}>✕</button>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button className="btn-ghost btn-sm" onClick={() => setPrizeEdit({ ...prizeEdit, rows: [...prizeEdit.rows, { label: `Top ${prizeEdit.rows.length + 1}`, reward: "" }] })}>
+                + Thêm giải
+              </button>
+              <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={savePrizes}>Lưu giải thưởng</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {profile && (
         <div className="modal-bg" onClick={() => setProfile(null)}>

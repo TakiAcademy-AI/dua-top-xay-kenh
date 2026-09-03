@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireAdmin, jsonError } from "@/lib/api";
+import { sanitizePrizes } from "@/lib/prizes";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ export async function GET() {
       end_date: c.end_date,
       registration_deadline: c.registration_deadline,
       prize: c.prize,
+      prizes: c.prizes ?? [],
       weights: c.weights,
       weekly_quota: c.weekly_quota,
       status: c.status,
@@ -92,6 +94,7 @@ export async function POST(req: NextRequest) {
       end_date: endDate,
       registration_deadline: deadline,
       prize: body.prize ? String(body.prize) : null,
+      prizes: sanitizePrizes(body.prizes),
       weights,
       weekly_quota: Math.max(0, Number(body.weekly_quota ?? 0) | 0),
       normalize_by_baseline: body.normalize_by_baseline !== false,

@@ -18,9 +18,11 @@ on conflict (platform) do nothing;
 
 -- Chiến dịch mẫu cho lớp MTKC K12 (đang chạy)
 with c as (select id from classes where code = 'MTKC-K12')
-insert into campaigns (name, scope, start_date, end_date, registration_deadline, prize, weekly_quota, status)
+insert into campaigns (name, scope, start_date, end_date, registration_deadline, prize, prizes, weekly_quota, status)
 select 'Đường đua 30 ngày K12', 'class', current_date - 5, current_date + 25, current_date + 10,
-       'Top 1 nhận suất coaching 1:1 cùng Founder', 5, 'running'
+       'Top 1 nhận suất coaching 1:1 cùng Founder',
+       '[{"label":"Top 1","reward":"Suất coaching 1:1 cùng Founder"},{"label":"Top 2-3","reward":"Vé tham dự buổi tổng kết trên sân khấu"},{"label":"Đủ chỉ tiêu 4 tuần","reward":"Chứng nhận hoàn thành đường đua"}]',
+       5, 'running'
 where not exists (select 1 from campaigns where name = 'Đường đua 30 ngày K12');
 
 insert into campaign_classes (campaign_id, class_id)

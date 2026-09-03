@@ -21,7 +21,7 @@ export async function GET(_req: NextRequest, { params }: { params: { code: strin
   if (campIds.length) {
     const { data } = await db
       .from("campaigns")
-      .select("id, name, prize, status, start_date, end_date, registration_deadline")
+      .select("id, name, prize, prizes, status, start_date, end_date, registration_deadline")
       .in("id", campIds)
       .order("start_date", { ascending: false });
     campaigns = data ?? [];

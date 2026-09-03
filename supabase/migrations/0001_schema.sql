@@ -45,7 +45,8 @@ create table if not exists campaigns (
   start_date date not null,
   end_date date not null,
   registration_deadline date,
-  prize text,
+  prize text,                                   -- dòng giải thưởng ngắn (fallback khi chưa có cơ cấu chi tiết)
+  prizes jsonb not null default '[]',           -- cơ cấu giải tùy biến: [{"label":"Top 1","reward":"..."}]
   weights jsonb not null default '{"follower":10,"per_1000_views":5,"new_video":20,"engagement":2,"weekly_bonus":100}',
   weekly_quota int not null default 0,          -- số video tối thiểu / tuần
   normalize_by_baseline boolean not null default true,

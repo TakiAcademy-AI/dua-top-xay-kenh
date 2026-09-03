@@ -8,7 +8,7 @@ export async function GET() {
   const db = supabaseAdmin();
   const { data: camp } = await db
     .from("campaigns")
-    .select("id, name, prize, start_date, end_date, registration_deadline, status, campaign_classes(classes(name))")
+    .select("id, name, prize, prizes, start_date, end_date, registration_deadline, status, campaign_classes(classes(name))")
     .in("status", ["open", "running"])
     .order("start_date", { ascending: false })
     .limit(1)
@@ -43,7 +43,8 @@ export async function GET() {
     campaign: {
       id: camp.id,
       name: camp.name,
-      prize: camp.prize,
+      prize: camp.prize ?? ((camp as any).prizes?.[0] ? `${(camp as any).prizes[0].label}: ${(camp as any).prizes[0].reward}` : null),
+      prizes: (camp as any).prizes ?? [],
       end_date: camp.end_date,
       registration_deadline: camp.registration_deadline,
       class_names: classNames,
