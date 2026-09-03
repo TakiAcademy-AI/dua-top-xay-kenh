@@ -203,6 +203,20 @@ export default function AdminPage() {
     else toast((await r.json()).error ?? "Lỗi");
   }
 
+  async function removeChannel(chId: string, username: string) {
+    const reason = prompt(`Gỡ kênh @${username}? Kênh sẽ ẩn khỏi hệ thống và ngừng tính điểm (lịch sử vẫn giữ).\nNhập lý do (bắt buộc):`);
+    if (!reason) return;
+    const r = await fetch(`/api/admin/channels/${chId}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
+    if (r.ok) { toast("Đã gỡ kênh"); openProfile(profile.student.id); loadStudents(q); }
+    else toast((await r.json()).error ?? "Lỗi");
+  }
+
+  async function restoreChannel(chId: string) {
+    const r = await fetch(`/api/admin/channels/${chId}`, { method: "PATCH" });
+    if (r.ok) { toast("Đã khôi phục kênh — chờ xác minh lại"); openProfile(profile.student.id); loadStudents(q); }
+    else toast((await r.json()).error ?? "Lỗi");
+  }
+
   async function toggleLock() {
     const lock = profile.student.status !== "locked";
     const reason = lock ? prompt("Lý do khóa học viên (bắt buộc):") : null;
@@ -659,9 +673,17 @@ export default function AdminPage() {
                 </div>
                 {c.status === "verified" ? <span className="st st-ok">Đã xác minh</span>
                   : c.status === "flagged" ? <span className="st st-flag">Gắn cờ</span>
+                  : c.status === "removed" ? <span className="st" style={{ color: "#8a94a6", borderColor: "#8a94a6" }}>Đã gỡ</span>
                   : <span className="st st-wait">Chờ xác minh</span>}
-                {c.status !== "verified" && (
-                  <button className="btn-ghost btn-sm" onClick={() => verifyChannel(c.id)}>Xác minh tay</button>
+                {c.status === "removed" ? (
+                  <button className="btn-ghost btn-sm" onClick={() => restoreChannel(c.id)}>Khôi phục</button>
+                ) : (
+                  <>
+                    {c.status !== "verified" && (
+                      <button className="btn-ghost btn-sm" onClick={() => verifyChannel(c.id)}>Xác minh tay</button>
+                    )}
+                    <button className="btn-ghost btn-sm btn-danger" onClick={() => removeChannel(c.id, c.username)}>Gỡ kênh</button>
+                  </>
                 )}
               </div>
             ))}
