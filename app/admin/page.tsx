@@ -5,7 +5,7 @@ import { Lane, LBRow, METRIC_LABEL, SiteHeader, useToast } from "@/components/ui
 
 type Prize = { label: string; reward: string };
 type Campaign = {
-  id: string; name: string; scope: string; class_names: string[];
+  id: string; name: string; scope: string; class_names: string[]; class_ids: string[];
   start_date: string; end_date: string; registration_deadline: string | null;
   prize: string | null; prizes: Prize[]; weights: Record<string, number>; weekly_quota: number;
   status: string; participants: number;
@@ -17,6 +17,15 @@ type StudentRow = {
 
 const fmt = (n: number) => Math.round(n).toLocaleString("vi-VN");
 const dmy = (d: string | null) => (d ? d.split("-").reverse().join("/") : "—");
+/** Diễn giải ngày kiểu Việt đầy đủ, chống nhầm ngày/tháng: "thứ Bảy, ngày 5 tháng 9 năm 2026" */
+const viDate = (d: string | null): string => {
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return "";
+  const [y, m, day] = d.split("-").map(Number);
+  const wd = ["Chủ nhật", "thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy"][new Date(`${d}T00:00:00+07:00`).getDay()];
+  return `${wd}, ngày ${day} tháng ${m} năm ${y}`;
+};
+const DateHint = ({ d }: { d: string | null }) =>
+  viDate(d) ? <p className="mini-note" style={{ marginTop: 4, color: "var(--navy-2)" }}>→ {viDate(d)}</p> : null;
 const STATUS_PILL: Record<string, [string, string]> = {
   running: ["pill-live", "Đang chạy"],
   open: ["pill-soon", "Sắp mở"],
@@ -56,8 +65,8 @@ export default function AdminPage() {
   // Modal sửa giải thưởng (sửa được mọi lúc, kể cả khi đang chạy)
   const [prizeEdit, setPrizeEdit] = useState<{ camp: Campaign; rows: Prize[] } | null>(null);
   const [editCamp, setEditCamp] = useState<{
-    id: string; status: string; name: string; start_date: string; end_date: string;
-    registration_deadline: string; weekly_quota: string; weights: Record<string, string>;
+    id: string; status: string; scope: string; name: string; start_date: string; end_date: string;
+    registration_deadline: string; weekly_quota: string; weights: Record<string, string>; class_ids: string[];
   } | null>(null);
 
   const loadCampaigns = useCallback(async () => {
@@ -217,11 +226,12 @@ export default function AdminPage() {
 
   function openCampaignEdit(c: Campaign) {
     setEditCamp({
-      id: c.id, status: c.status, name: c.name,
+      id: c.id, status: c.status, scope: c.scope, name: c.name,
       start_date: c.start_date, end_date: c.end_date,
       registration_deadline: c.registration_deadline ?? "",
       weekly_quota: String(c.weekly_quota ?? 0),
       weights: Object.fromEntries(Object.entries(c.weights ?? {}).map(([k, v]) => [k, String(v)])),
+      class_ids: c.class_ids ?? [],
     });
   }
 
@@ -233,6 +243,7 @@ export default function AdminPage() {
       end_date: editCamp.end_date,
       registration_deadline: editCamp.registration_deadline || null,
     };
+    if (editCamp.scope === "class") body.class_ids = editCamp.class_ids;
     if (!frozen) {
       body.start_date = editCamp.start_date;
       body.weekly_quota = Number(editCamp.weekly_quota || 0);
@@ -433,12 +444,15 @@ export default function AdminPage() {
               )}
               <div className="two-col">
                 <div className="field"><label>Ngày bắt đầu</label>
-                  <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} /></div>
+                  <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
+                  <DateHint d={form.start_date} /></div>
                 <div className="field"><label>Ngày kết thúc</label>
-                  <input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} /></div>
+                  <input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
+                  <DateHint d={form.end_date} /></div>
               </div>
               <div className="field"><label>Hạn chốt đăng ký kênh</label>
-                <input type="date" value={form.registration_deadline} onChange={(e) => setForm({ ...form, registration_deadline: e.target.value })} /></div>
+                <input type="date" value={form.registration_deadline} onChange={(e) => setForm({ ...form, registration_deadline: e.target.value })} />
+                <DateHint d={form.registration_deadline || null} /></div>
               <div className="field">
                 <label>Cơ cấu giải thưởng (hiện trên trang đua, sửa được cả khi đang chạy)</label>
                 {form.prizes.map((p, i) => (
@@ -712,17 +726,31 @@ export default function AdminPage() {
               )}
               <div className="field"><label>Tên chiến dịch</label>
                 <input value={editCamp.name} onChange={(e) => setEditCamp({ ...editCamp, name: e.target.value })} /></div>
+              {editCamp.scope === "class" && (
+                <div className="field"><label>Lớp áp dụng (giữ Cmd/Ctrl để chọn nhiều)</label>
+                  <select multiple size={Math.min(4, Math.max(2, classes.length))} value={editCamp.class_ids}
+                    onChange={(e) => setEditCamp({ ...editCamp, class_ids: Array.from(e.target.selectedOptions).map((o) => o.value) })}>
+                    {classes.map((cl) => <option key={cl.id} value={cl.id}>{cl.name}</option>)}
+                  </select>
+                  <p className="mini-note" style={{ marginTop: 4 }}>
+                    Bỏ lớp chỉ chặn đăng ký mới — học viên đã ghi danh vẫn ở lại đường đua.
+                  </p>
+                </div>
+              )}
               <div className="two-col">
                 <div className="field"><label>Ngày bắt đầu{frozen ? " 🔒" : ""}</label>
                   <input type="date" value={editCamp.start_date} disabled={frozen}
-                    onChange={(e) => setEditCamp({ ...editCamp, start_date: e.target.value })} /></div>
+                    onChange={(e) => setEditCamp({ ...editCamp, start_date: e.target.value })} />
+                  <DateHint d={editCamp.start_date} /></div>
                 <div className="field"><label>Ngày kết thúc</label>
                   <input type="date" value={editCamp.end_date}
-                    onChange={(e) => setEditCamp({ ...editCamp, end_date: e.target.value })} /></div>
+                    onChange={(e) => setEditCamp({ ...editCamp, end_date: e.target.value })} />
+                  <DateHint d={editCamp.end_date} /></div>
               </div>
               <div className="field"><label>Hạn chốt đăng ký kênh (bỏ trống = không giới hạn)</label>
                 <input type="date" value={editCamp.registration_deadline}
-                  onChange={(e) => setEditCamp({ ...editCamp, registration_deadline: e.target.value })} /></div>
+                  onChange={(e) => setEditCamp({ ...editCamp, registration_deadline: e.target.value })} />
+                <DateHint d={editCamp.registration_deadline || null} /></div>
               <div className="field"><label>Chỉ tiêu video tối thiểu mỗi tuần{frozen ? " 🔒" : ""}</label>
                 <input type="number" min={0} value={editCamp.weekly_quota} disabled={frozen}
                   onChange={(e) => setEditCamp({ ...editCamp, weekly_quota: e.target.value })} /></div>

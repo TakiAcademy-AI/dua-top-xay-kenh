@@ -66,7 +66,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   for (const f of ruleChanged) patch[f] = body[f];
 
-  if (!Object.keys(patch).length) return jsonError("Không có gì để cập nhật");
+  // Sửa danh sách lớp áp dụng (mọi lúc — mở rộng đường đua giữa chừng là nhu cầu thật).
+  // Bỏ lớp chỉ chặn đăng ký mới; học viên đã ghi danh vẫn giữ nguyên trong chiến dịch.
+  let classIds: string[] | null = null;
+  if (body.class_ids !== undefined) {
+    if (!Array.isArray(body.class_ids)) return jsonError("class_ids phải là danh sách");
+    const ids: string[] = body.class_ids.map(String);
+    if (camp.scope === "class" && !ids.length) return jsonError("Chiến dịch theo lớp phải có ít nhất 1 lớp");
+    classIds = ids;
+  }
+
+  if (!Object.keys(patch).length && classIds === null) return jsonError("Không có gì để cập nhật");
 
   const start = String(patch.start_date ?? camp.start_date);
   const end = String(patch.end_date ?? camp.end_date);
@@ -79,11 +89,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return jsonError("Chỉ tiêu tuần phải là số không âm");
   }
 
-  const { error } = await db.from("campaigns").update(patch).eq("id", camp.id);
-  if (error) return jsonError("Không cập nhật được", 500);
+  if (Object.keys(patch).length) {
+    const { error } = await db.from("campaigns").update(patch).eq("id", camp.id);
+    if (error) return jsonError("Không cập nhật được", 500);
+  }
+
+  if (classIds !== null) {
+    await db.from("campaign_classes").delete().eq("campaign_id", camp.id);
+    if (classIds.length) {
+      const { error: ccErr } = await db
+        .from("campaign_classes")
+        .insert(classIds.map((class_id) => ({ campaign_id: camp.id, class_id })));
+      if (ccErr) return jsonError("Không cập nhật được danh sách lớp", 500);
+    }
+  }
+
   await db.from("audit_logs").insert({
     actor_id: "admin", action: "update_campaign", target_type: "campaign", target_id: camp.id,
-    detail: { changed: Object.keys(patch), patch } as any,
+    detail: { changed: [...Object.keys(patch), ...(classIds !== null ? ["class_ids"] : [])], patch, class_ids: classIds } as any,
   });
   return NextResponse.json({ ok: true });
 }

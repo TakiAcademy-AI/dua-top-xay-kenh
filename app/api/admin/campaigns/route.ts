@@ -13,7 +13,7 @@ export async function GET() {
 
   const { data: camps } = await db
     .from("campaigns")
-    .select("*, campaign_classes(classes(name))")
+    .select("*, campaign_classes(class_id, classes(name))")
     .order("created_at", { ascending: false });
 
   const { data: parts } = await db.from("campaign_participants").select("campaign_id, student_id");
@@ -40,6 +40,7 @@ export async function GET() {
       name: c.name,
       scope: c.scope,
       class_names: (c.campaign_classes ?? []).map((cc: any) => cc.classes?.name).filter(Boolean),
+      class_ids: (c.campaign_classes ?? []).map((cc: any) => cc.class_id).filter(Boolean),
       start_date: c.start_date,
       end_date: c.end_date,
       registration_deadline: c.registration_deadline,
