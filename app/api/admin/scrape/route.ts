@@ -23,19 +23,6 @@ export async function GET() {
     .order("started_at", { ascending: false })
     .limit(20);
 
-  // Chi phí quét hôm nay + 30 ngày (engine trực tiếp = 0)
-  const { data: costRows } = await db
-    .from("scrape_runs")
-    .select("cost_usd, started_at")
-    .gte("started_at", new Date(Date.now() - 30 * 86_400_000).toISOString());
-  let costToday = 0;
-  let cost30d = 0;
-  for (const r of costRows ?? []) {
-    const c = Number(r.cost_usd ?? 0);
-    cost30d += c;
-    if (String(r.started_at).slice(0, 10) === today) costToday += c;
-  }
-
   // Cảnh báo: kênh đang theo dõi nhưng chưa có snapshot hôm nay + kênh bị gắn cờ
   const { data: channels } = await db
     .from("channels")
@@ -62,7 +49,6 @@ export async function GET() {
     today,
     configs: configs ?? [],
     runs: runs ?? [],
-    cost: { today: costToday, last_30d: cost30d },
     channels_total: (channels ?? []).length,
     channels_scanned_today: scanned.size,
     not_scanned: notScanned.slice(0, 50),

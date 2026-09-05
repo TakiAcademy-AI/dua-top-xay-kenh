@@ -406,7 +406,7 @@ export default function AdminPage() {
           <button className={tab === "new" ? "on" : ""} onClick={() => setTab("new")}>+ Tạo chiến dịch</button>
           <button className={tab === "students" ? "on" : ""} onClick={() => setTab("students")}>Học viên</button>
           <button className={tab === "bxh" ? "on" : ""} onClick={() => setTab("bxh")}>Bảng xếp hạng</button>
-          <button className={tab === "scrape" ? "on" : ""} onClick={() => setTab("scrape")}>Quét dữ liệu</button>
+          <button className={tab === "scrape" ? "on" : ""} onClick={() => setTab("scrape")}>Quét</button>
         </div>
 
         {tab === "camp" && (
@@ -667,8 +667,8 @@ export default function AdminPage() {
                 <span>Kênh đã quét hôm nay</span>
               </div>
               <div className="stat">
-                <b>${scrape ? (scrape.cost.today ?? 0).toFixed(2) : "…"}</b>
-                <span>Chi phí quét hôm nay (30 ngày: ${scrape ? (scrape.cost.last_30d ?? 0).toFixed(2) : "…"})</span>
+                <b>{scrape?.runs?.[0] ? new Date(scrape.runs[0].started_at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "—"}</b>
+                <span>Lần quét gần nhất</span>
               </div>
             </div>
 
@@ -743,7 +743,7 @@ export default function AdminPage() {
               <h3>🗂 20 lượt quét gần nhất</h3>
               <div className="table-scroll">
                 <table>
-                  <thead><tr><th>Thời điểm</th><th>Nền tảng</th><th>Engine</th><th>Kênh</th><th>Trạng thái</th><th>Chi phí</th></tr></thead>
+                  <thead><tr><th>Thời điểm</th><th>Nền tảng</th><th>Engine</th><th>Kênh</th><th>Trạng thái</th></tr></thead>
                   <tbody>
                     {(scrape?.runs ?? []).map((r: any) => (
                       <tr key={r.id}>
@@ -756,10 +756,9 @@ export default function AdminPage() {
                             {r.status === "succeeded" ? "Thành công" : r.status === "failed" ? "Lỗi" : "Đang chạy"}
                           </span>
                         </td>
-                        <td>{r.cost_usd != null ? `$${Number(r.cost_usd).toFixed(3)}` : "—"}</td>
                       </tr>
                     ))}
-                    {scrape && !scrape.runs?.length && <tr><td colSpan={6}>Chưa có lượt quét nào. Bấm "Quét ngay" để chạy thử.</td></tr>}
+                    {scrape && !scrape.runs?.length && <tr><td colSpan={5}>Chưa có lượt quét nào. Bấm "Quét ngay" để chạy thử.</td></tr>}
                   </tbody>
                 </table>
               </div>
