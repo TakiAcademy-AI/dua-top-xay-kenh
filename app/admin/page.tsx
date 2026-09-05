@@ -55,6 +55,10 @@ export default function AdminPage() {
   const [newClassName, setNewClassName] = useState("");
   // Modal sửa giải thưởng (sửa được mọi lúc, kể cả khi đang chạy)
   const [prizeEdit, setPrizeEdit] = useState<{ camp: Campaign; rows: Prize[] } | null>(null);
+  const [editCamp, setEditCamp] = useState<{
+    id: string; status: string; name: string; start_date: string; end_date: string;
+    registration_deadline: string; weekly_quota: string; weights: Record<string, string>;
+  } | null>(null);
 
   const loadCampaigns = useCallback(async () => {
     const r = await fetch("/api/admin/campaigns");
@@ -211,6 +215,37 @@ export default function AdminPage() {
     else toast(d.error ?? "Không cập nhật được");
   }
 
+  function openCampaignEdit(c: Campaign) {
+    setEditCamp({
+      id: c.id, status: c.status, name: c.name,
+      start_date: c.start_date, end_date: c.end_date,
+      registration_deadline: c.registration_deadline ?? "",
+      weekly_quota: String(c.weekly_quota ?? 0),
+      weights: Object.fromEntries(Object.entries(c.weights ?? {}).map(([k, v]) => [k, String(v)])),
+    });
+  }
+
+  async function saveCampaignEdit() {
+    if (!editCamp) return;
+    const frozen = !["draft", "open"].includes(editCamp.status);
+    const body: Record<string, unknown> = {
+      name: editCamp.name,
+      end_date: editCamp.end_date,
+      registration_deadline: editCamp.registration_deadline || null,
+    };
+    if (!frozen) {
+      body.start_date = editCamp.start_date;
+      body.weekly_quota = Number(editCamp.weekly_quota || 0);
+      body.weights = Object.fromEntries(Object.entries(editCamp.weights).map(([k, v]) => [k, Number(v || 0)]));
+    }
+    const r = await fetch(`/api/admin/campaigns/${editCamp.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (r.ok) { toast("Đã cập nhật chiến dịch"); setEditCamp(null); loadCampaigns(); }
+    else toast(d.error ?? "Không cập nhật được");
+  }
+
   async function savePrizes() {
     if (!prizeEdit) return;
     const r = await fetch(`/api/admin/campaigns/${prizeEdit.camp.id}`, {
@@ -336,6 +371,7 @@ export default function AdminPage() {
                           <td>{c.participants || "—"}</td>
                           <td><span className={`pill ${pill[0]}`}>{pill[1]}</span></td>
                           <td style={{ whiteSpace: "nowrap" }}>
+                            <button className="btn-ghost btn-sm" onClick={() => openCampaignEdit(c)}>✏️ Sửa</button>{" "}
                             <button
                               className="btn-ghost btn-sm"
                               onClick={() => setPrizeEdit({
@@ -661,6 +697,57 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {editCamp && (() => {
+        const frozen = !["draft", "open"].includes(editCamp.status);
+        return (
+          <div className="modal-bg" onClick={() => setEditCamp(null)}>
+            <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+              <h3 style={{ fontWeight: 800, color: "var(--navy)", marginBottom: 4 }}>✏️ Sửa chiến dịch</h3>
+              {frozen && (
+                <p className="mini-note" style={{ marginBottom: 12 }}>
+                  Chiến dịch đã bắt đầu — <b>luật tính điểm bị đóng băng</b> (ngày bắt đầu, trọng số, chỉ tiêu tuần)
+                  để không thay luật giữa cuộc đua. Tên, ngày kết thúc và hạn đăng ký vẫn sửa được.
+                </p>
+              )}
+              <div className="field"><label>Tên chiến dịch</label>
+                <input value={editCamp.name} onChange={(e) => setEditCamp({ ...editCamp, name: e.target.value })} /></div>
+              <div className="two-col">
+                <div className="field"><label>Ngày bắt đầu{frozen ? " 🔒" : ""}</label>
+                  <input type="date" value={editCamp.start_date} disabled={frozen}
+                    onChange={(e) => setEditCamp({ ...editCamp, start_date: e.target.value })} /></div>
+                <div className="field"><label>Ngày kết thúc</label>
+                  <input type="date" value={editCamp.end_date}
+                    onChange={(e) => setEditCamp({ ...editCamp, end_date: e.target.value })} /></div>
+              </div>
+              <div className="field"><label>Hạn chốt đăng ký kênh (bỏ trống = không giới hạn)</label>
+                <input type="date" value={editCamp.registration_deadline}
+                  onChange={(e) => setEditCamp({ ...editCamp, registration_deadline: e.target.value })} /></div>
+              <div className="field"><label>Chỉ tiêu video tối thiểu mỗi tuần{frozen ? " 🔒" : ""}</label>
+                <input type="number" min={0} value={editCamp.weekly_quota} disabled={frozen}
+                  onChange={(e) => setEditCamp({ ...editCamp, weekly_quota: e.target.value })} /></div>
+              <label style={{ marginBottom: 6 }}>Trọng số điểm{frozen ? " 🔒" : ""}</label>
+              {([
+                ["follower", "Follower tăng thêm"],
+                ["per_1000_views", "Mỗi 1.000 lượt xem"],
+                ["new_video", "Mỗi video đăng mới"],
+                ["engagement", "Tương tác"],
+                ["weekly_bonus", "Chuyên cần (đủ chỉ tiêu tuần)"],
+              ] as const).map(([key, label]) => (
+                <div className="w-row" key={key}>
+                  <span>{label}</span>
+                  <input type="number" min={0} value={editCamp.weights[key] ?? "0"} disabled={frozen}
+                    onChange={(e) => setEditCamp({ ...editCamp, weights: { ...editCamp.weights, [key]: e.target.value } })} />
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                <button className="btn" style={{ width: "auto" }} onClick={saveCampaignEdit}>Lưu thay đổi</button>
+                <button className="btn-ghost" onClick={() => setEditCamp(null)}>Hủy</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {prizeEdit && (
         <div className="modal-bg" onClick={() => setPrizeEdit(null)}>
