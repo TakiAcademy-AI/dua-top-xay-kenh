@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { jsonError } from "@/lib/api";
+import { autoStartCampaigns } from "@/lib/scoring";
+import { todayVN } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 /** Trang riêng của một lớp: thông tin lớp, các chiến dịch của lớp, BXH chiến dịch đang chạy. Public. */
 export async function GET(_req: NextRequest, { params }: { params: { code: string } }) {
   const db = supabaseAdmin();
+  await autoStartCampaigns(todayVN());
   const { data: cls } = await db
     .from("classes")
     .select("id, name, code")

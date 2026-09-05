@@ -35,12 +35,18 @@ export type ScoringReport = {
 
 const clamp0 = (n: number) => (n > 0 ? n : 0); // delta âm tính bằng 0, không trừ điểm ở V1
 
+/** Tự chuyển open -> running khi đã đến ngày bắt đầu (đóng băng công thức từ đây).
+ *  Gọi ở job tính điểm VÀ các trang danh sách — để chiến dịch tạo trong ngày không phải đợi 06:00 hôm sau. */
+export async function autoStartCampaigns(date: string): Promise<void> {
+  const db = supabaseAdmin();
+  await db.from("campaigns").update({ status: "running" }).eq("status", "open").lte("start_date", date);
+}
+
 export async function runDailyScoring(date: string): Promise<ScoringReport> {
   const db = supabaseAdmin();
   const report: ScoringReport = { date, campaigns: 0, entries: 0, flagged: [], scrapeFailed: [] };
 
-  // Tự chuyển open -> running khi đến ngày bắt đầu (đóng băng công thức từ đây)
-  await db.from("campaigns").update({ status: "running" }).eq("status", "open").lte("start_date", date);
+  await autoStartCampaigns(date);
 
   const { data: campaigns, error: cErr } = await db
     .from("campaigns")

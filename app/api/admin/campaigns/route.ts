@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireAdmin, jsonError } from "@/lib/api";
 import { sanitizePrizes } from "@/lib/prizes";
+import { autoStartCampaigns } from "@/lib/scoring";
+import { todayVN } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,7 @@ export async function GET() {
   if ("error" in auth) return auth.error;
   const db = supabaseAdmin();
 
+  await autoStartCampaigns(todayVN());
   const { data: camps } = await db
     .from("campaigns")
     .select("*, campaign_classes(class_id, classes(name))")

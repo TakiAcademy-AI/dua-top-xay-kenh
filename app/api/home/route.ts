@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { addDays, todayVN } from "@/lib/format";
 import { PLATFORM_LABEL, Platform } from "@/lib/channels";
+import { autoStartCampaigns } from "@/lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ const MILESTONES = [1_000_000, 500_000, 100_000, 50_000, 10_000, 5_000, 1_000];
 export async function GET() {
   const db = supabaseAdmin();
   const today = todayVN();
+  await autoStartCampaigns(today);
   const yesterday = addDays(today, -1);
   const weekAgo = addDays(today, -7);
 

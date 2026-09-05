@@ -85,7 +85,7 @@ function DateField({ value, onChange, disabled }: { value: string; onChange: (is
 }
 const STATUS_PILL: Record<string, [string, string]> = {
   running: ["pill-live", "Đang chạy"],
-  open: ["pill-soon", "Sắp mở"],
+  open: ["pill-soon", "Mở đăng ký"],
   draft: ["pill-soon", "Nháp"],
   paused: ["pill-warn", "Tạm dừng"],
   finished: ["pill-done", "Đã kết thúc"],
