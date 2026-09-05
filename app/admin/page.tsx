@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Lane, LBRow, METRIC_LABEL, SiteHeader, useToast } from "@/components/ui";
 
 type Prize = { label: string; reward: string };
@@ -17,15 +17,72 @@ type StudentRow = {
 
 const fmt = (n: number) => Math.round(n).toLocaleString("vi-VN");
 const dmy = (d: string | null) => (d ? d.split("-").reverse().join("/") : "—");
-/** Diễn giải ngày kiểu Việt đầy đủ, chống nhầm ngày/tháng: "thứ Bảy, ngày 5 tháng 9 năm 2026" */
-const viDate = (d: string | null): string => {
-  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return "";
-  const [y, m, day] = d.split("-").map(Number);
-  const wd = ["Chủ nhật", "thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy"][new Date(`${d}T00:00:00+07:00`).getDay()];
-  return `${wd}, ngày ${day} tháng ${m} năm ${y}`;
+/* ==== Ô nhập ngày định dạng Việt dd/mm/yyyy cố định (không phụ thuộc ngôn ngữ trình duyệt) ====
+ * Gõ tay tự chèn dấu "/", hoặc bấm 📅 mở lịch. Giá trị lưu/truyền đi luôn là ISO yyyy-mm-dd. */
+const iso2dmy = (iso: string): string =>
+  /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split("-").reverse().join("/") : "";
+const dmy2iso = (t: string): string | null => {
+  const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const [, d, mo, y] = m;
+  const iso = `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  const dt = new Date(`${iso}T00:00:00`);
+  if (isNaN(dt.getTime()) || dt.getDate() !== Number(d) || dt.getMonth() + 1 !== Number(mo)) return null;
+  return iso;
 };
-const DateHint = ({ d }: { d: string | null }) =>
-  viDate(d) ? <p className="mini-note" style={{ marginTop: 4, color: "var(--navy-2)" }}>→ {viDate(d)}</p> : null;
+
+function DateField({ value, onChange, disabled }: { value: string; onChange: (iso: string) => void; disabled?: boolean }) {
+  const [text, setText] = useState(iso2dmy(value));
+  const [bad, setBad] = useState(false);
+  const pickerRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { setText(iso2dmy(value)); setBad(false); }, [value]);
+
+  function handleText(raw: string) {
+    // chỉ giữ số, tự chèn "/" theo dd/mm/yyyy
+    const digits = raw.replace(/\D/g, "").slice(0, 8);
+    let t = digits;
+    if (digits.length > 4) t = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    else if (digits.length > 2) t = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    setText(t);
+    if (!t) { setBad(false); onChange(""); return; }
+    const iso = dmy2iso(t);
+    if (iso) { setBad(false); onChange(iso); }
+    else setBad(t.length >= 10);
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 6 }}>
+      <input
+        value={text}
+        onChange={(e) => handleText(e.target.value)}
+        placeholder="dd/mm/yyyy"
+        inputMode="numeric"
+        disabled={disabled}
+        style={bad ? { borderColor: "var(--red)" } : undefined}
+      />
+      <button
+        type="button"
+        className="btn-ghost btn-sm"
+        disabled={disabled}
+        title="Mở lịch"
+        style={{ flexShrink: 0 }}
+        onClick={() => { const p = pickerRef.current as any; if (p?.showPicker) p.showPicker(); else p?.click(); }}
+      >
+        📅
+      </button>
+      <input
+        ref={pickerRef}
+        type="date"
+        value={/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ""}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        tabIndex={-1}
+        aria-hidden
+        style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+      />
+    </div>
+  );
+}
 const STATUS_PILL: Record<string, [string, string]> = {
   running: ["pill-live", "Đang chạy"],
   open: ["pill-soon", "Sắp mở"],
@@ -444,15 +501,12 @@ export default function AdminPage() {
               )}
               <div className="two-col">
                 <div className="field"><label>Ngày bắt đầu</label>
-                  <input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
-                  <DateHint d={form.start_date} /></div>
+                  <DateField value={form.start_date} onChange={(v) => setForm({ ...form, start_date: v })} /></div>
                 <div className="field"><label>Ngày kết thúc</label>
-                  <input type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
-                  <DateHint d={form.end_date} /></div>
+                  <DateField value={form.end_date} onChange={(v) => setForm({ ...form, end_date: v })} /></div>
               </div>
               <div className="field"><label>Hạn chốt đăng ký kênh</label>
-                <input type="date" value={form.registration_deadline} onChange={(e) => setForm({ ...form, registration_deadline: e.target.value })} />
-                <DateHint d={form.registration_deadline || null} /></div>
+                <DateField value={form.registration_deadline} onChange={(v) => setForm({ ...form, registration_deadline: v })} /></div>
               <div className="field">
                 <label>Cơ cấu giải thưởng (hiện trên trang đua, sửa được cả khi đang chạy)</label>
                 {form.prizes.map((p, i) => (
@@ -739,18 +793,15 @@ export default function AdminPage() {
               )}
               <div className="two-col">
                 <div className="field"><label>Ngày bắt đầu{frozen ? " 🔒" : ""}</label>
-                  <input type="date" value={editCamp.start_date} disabled={frozen}
-                    onChange={(e) => setEditCamp({ ...editCamp, start_date: e.target.value })} />
-                  <DateHint d={editCamp.start_date} /></div>
+                  <DateField value={editCamp.start_date} disabled={frozen}
+                    onChange={(v) => setEditCamp({ ...editCamp, start_date: v })} /></div>
                 <div className="field"><label>Ngày kết thúc</label>
-                  <input type="date" value={editCamp.end_date}
-                    onChange={(e) => setEditCamp({ ...editCamp, end_date: e.target.value })} />
-                  <DateHint d={editCamp.end_date} /></div>
+                  <DateField value={editCamp.end_date}
+                    onChange={(v) => setEditCamp({ ...editCamp, end_date: v })} /></div>
               </div>
               <div className="field"><label>Hạn chốt đăng ký kênh (bỏ trống = không giới hạn)</label>
-                <input type="date" value={editCamp.registration_deadline}
-                  onChange={(e) => setEditCamp({ ...editCamp, registration_deadline: e.target.value })} />
-                <DateHint d={editCamp.registration_deadline || null} /></div>
+                <DateField value={editCamp.registration_deadline}
+                  onChange={(v) => setEditCamp({ ...editCamp, registration_deadline: v })} /></div>
               <div className="field"><label>Chỉ tiêu video tối thiểu mỗi tuần{frozen ? " 🔒" : ""}</label>
                 <input type="number" min={0} value={editCamp.weekly_quota} disabled={frozen}
                   onChange={(e) => setEditCamp({ ...editCamp, weekly_quota: e.target.value })} /></div>
