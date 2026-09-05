@@ -50,7 +50,7 @@ export function AppShell({ active, children }: { active: "home" | "race" | "dash
           {item("dashboard", loggedIn ? "/dashboard" : "/dang-ky", "👤", loggedIn ? "Dashboard của tôi" : "Đăng nhập")}
           {item("register", "/dang-ky", "📝", "Đăng ký kênh")}
           <div className="sb-group">TAKI Academy</div>
-          {item("hoc-tap", "https://taki.vn", "🎓", "Học tập", true)}
+          {item("hoc-tap", "https://edu.nguyentatkiem.com/", "🎓", "Học tập", true)}
         </nav>
         <div className="sb-note">
           Số liệu quét tự động mỗi ngày lúc 05:30 · điểm chốt 06:00
