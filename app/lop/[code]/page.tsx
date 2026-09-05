@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Countdown, ProfileModal, SiteHeader } from "@/components/ui";
 import { LeaderboardBoard } from "@/components/leaderboard";
+import { AppShell } from "@/components/sidebar";
 
 type Prize = { label: string; reward: string };
 type ClassData = {
@@ -40,7 +41,7 @@ export default function ClassPage({ params }: { params: { code: string } }) {
   }, [params.code]);
 
   return (
-    <>
+    <AppShell active="race">
       <SiteHeader
         subtitle="TAKI ACADEMY"
         right={
@@ -124,6 +125,6 @@ export default function ClassPage({ params }: { params: { code: string } }) {
         )}
       </div>
       {profileId && <ProfileModal publicId={profileId} onClose={() => setProfileId(null)} />}
-    </>
+    </AppShell>
   );
 }

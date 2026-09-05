@@ -218,3 +218,28 @@ tr:last-child td{border-bottom:none}
 .chan-card .u{min-width:0}
 .chan-card .u b{font-size:12.5px;display:block;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chan-card .u span{font-size:10.5px;color:var(--muted)}
+
+/* ===== Sidebar trái theo mockup (desktop) ===== */
+.shell{display:block}
+.shell-main{min-width:0}
+.sidebar{display:none}
+@media(min-width:1000px){
+  .shell{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+  .sidebar{display:flex;flex-direction:column;background:var(--card);border-right:1px solid var(--line);padding:18px 12px;position:sticky;top:0;height:100vh;overflow-y:auto}
+  .shell .site-header{display:none}
+  .shell .wrap{max-width:1150px}
+}
+.sb-logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:14.5px;color:var(--navy);text-decoration:none;padding:4px 8px 16px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.sb-logo .flag{width:34px;height:34px;border-radius:9px;background:var(--orange);display:grid;place-items:center;font-size:16px}
+.sb-logo small{display:block;font-weight:600;font-size:9.5px;color:var(--muted);letter-spacing:.5px}
+.sb-group{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:14px 10px 6px}
+.sb-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;font-size:13px;font-weight:700;color:var(--text);text-decoration:none;margin-bottom:2px;transition:.12s}
+.sb-item .ic{width:26px;height:26px;border-radius:8px;background:var(--bg);display:grid;place-items:center;font-size:13px;flex-shrink:0}
+.sb-item:hover{background:var(--bg)}
+.sb-item.on{background:var(--navy);color:#fff}
+.sb-item.on .ic{background:rgba(255,255,255,.15)}
+.sb-item.on-soft{background:var(--orange-soft);color:var(--navy)}
+.sb-item .ext{margin-left:auto;font-size:11px;color:var(--muted)}
+.sb-item.on .ext{color:#C9D3EC}
+.sb-sub{font-size:12.5px}
+.sb-note{margin-top:auto;font-size:10.5px;color:var(--muted);padding:14px 10px 4px;border-top:1px dashed var(--line);line-height:1.5}

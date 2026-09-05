@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ProfileModal, SiteHeader, initials } from "@/components/ui";
+import { AppShell } from "@/components/sidebar";
 
 type HomeCampaign = {
   id: string; name: string; prize: string | null; prizes: { label: string; reward: string }[]; scope: string; status: string;
@@ -49,7 +50,7 @@ export default function HomePage() {
   const maxAvg = data?.class_board[0]?.avg_score || 1;
 
   return (
-    <>
+    <AppShell active="home">
       <SiteHeader
         subtitle="TAKI ACADEMY"
         right={
@@ -236,6 +237,6 @@ export default function HomePage() {
       </div>
 
       {profileId && <ProfileModal publicId={profileId} onClose={() => setProfileId(null)} />}
-    </>
+    </AppShell>
   );
 }
