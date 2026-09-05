@@ -194,7 +194,11 @@ export function ProfileModal({ publicId, onClose }: { publicId: string; onClose:
                 <div className="chan" key={i}>
                   <div className={`pf ${pf.cls}`}>{pf.icon}</div>
                   <div className="u">
-                    <b>@{c.username}</b>
+                    <b>
+                      <a href={c.url} target="_blank" rel="noopener" style={{ color: "inherit", textDecoration: "none" }}>
+                        @{c.username} <span style={{ color: "var(--orange)", fontSize: 11 }}>↗</span>
+                      </a>
+                    </b>
                     <span>
                       {pf.label} · {fmtN(c.followers)} follower
                       {c.total_views != null ? ` · ${fmtN(c.total_views)} view` : ""}

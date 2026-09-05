@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Countdown, Lane, LBRow, Podium, ProfileModal, SiteHeader } from "@/components/ui";
+import { Countdown, ProfileModal, SiteHeader } from "@/components/ui";
+import { LeaderboardBoard } from "@/components/leaderboard";
 
 type Prize = { label: string; reward: string };
 type ClassData = {
   class: { id: string; name: string; code: string; students: number };
   campaigns: { id: string; name: string; prize: string | null; prizes: Prize[]; status: string; start_date: string; end_date: string }[];
   primary_campaign: { id: string; name: string; prize: string | null; prizes: Prize[]; end_date: string; registration_deadline: string | null } | null;
-  leaderboard: LBRow[];
 };
 
 function prizeList(prizes: Prize[] | undefined, prize: string | null): Prize[] {
@@ -39,8 +39,6 @@ export default function ClassPage({ params }: { params: { code: string } }) {
       .catch(() => setNotFound(true));
   }, [params.code]);
 
-  const max = data?.leaderboard[0]?.total_score ?? 0;
-
   return (
     <>
       <SiteHeader
@@ -59,7 +57,7 @@ export default function ClassPage({ params }: { params: { code: string } }) {
         {data && (
           <>
             <div className="hero">
-              <span className="tag">ĐƯỜNG ĐUA CỦA LỚP</span>
+              <span className="tag">🏆 ĐUA TOP XÂY KÊNH</span>
               <h1>{data.class.name}</h1>
               <p>
                 {data.class.students.toLocaleString("vi-VN")} học viên đã ghi danh
@@ -78,23 +76,16 @@ export default function ClassPage({ params }: { params: { code: string } }) {
               )}
             </div>
 
-            <div className="grid g2h">
-              <div className="card">
-                <h3>🏆 Bảng xếp hạng{data.primary_campaign ? ` · ${data.primary_campaign.name}` : ""}</h3>
-                {data.leaderboard.length ? (
-                  <>
-                    <Podium rows={data.leaderboard.slice(0, 3)} />
-                    {data.leaderboard.slice(3, 20).map((r) => (
-                      <Lane key={r.student_id} row={r} max={max} onClick={() => setProfileId(r.public_id)} />
-                    ))}
-                  </>
-                ) : (
-                  <p className="mini-note">Chưa có điểm — bảng xếp hạng xuất hiện sau chu kỳ tính điểm đầu tiên (06:00 hàng ngày).</p>
-                )}
-              </div>
+            {/* BXH dashboard: thống kê + podium + bảng đầy đủ (bấm hàng xem kênh) */}
+            {data.primary_campaign ? (
+              <LeaderboardBoard campaignId={data.primary_campaign.id} onOpenProfile={setProfileId} />
+            ) : (
+              <div className="card"><p className="mini-note">Lớp chưa có chiến dịch đang chạy.</p></div>
+            )}
 
+            <div className="grid g2h sec">
               <div className="card">
-                {data.primary_campaign && prizeList(data.primary_campaign.prizes, data.primary_campaign.prize).length > 0 && (
+                {data.primary_campaign && prizeList(data.primary_campaign.prizes, data.primary_campaign.prize).length > 0 ? (
                   <>
                     <h3>🎁 Cơ cấu giải thưởng</h3>
                     {prizeList(data.primary_campaign.prizes, data.primary_campaign.prize).map((p, i) => (
@@ -103,9 +94,13 @@ export default function ClassPage({ params }: { params: { code: string } }) {
                         <div><b>{p.label}</b><span className="t">{p.reward}</span></div>
                       </div>
                     ))}
-                    <div style={{ height: 16 }} />
                   </>
+                ) : (
+                  <h3>🎁 Giải thưởng sẽ công bố sớm</h3>
                 )}
+              </div>
+
+              <div className="card">
                 <h3>📋 Chiến dịch của lớp</h3>
                 {data.campaigns.map((c) => {
                   const pill = STATUS_LABEL[c.status] ?? ["pill-done", c.status];
