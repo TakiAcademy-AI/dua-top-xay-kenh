@@ -361,6 +361,17 @@ export default function AdminPage() {
     if (r.ok) { toast(lock ? "Đã khóa học viên" : "Đã mở khóa"); openProfile(profile.student.id); }
   }
 
+  async function deleteStudent() {
+    const s = profile.student;
+    if (!confirm(`XÓA HẲN hồ sơ "${s.full_name}" (${s.public_id})?\n\nSẽ xóa vĩnh viễn: toàn bộ kênh (giải phóng cho người khác đăng ký), điểm số, lịch sử ghi danh.\nHành động này KHÔNG hoàn tác được.`)) return;
+    const reason = prompt("Nhập lý do xóa (bắt buộc, lưu vào nhật ký hệ thống):");
+    if (!reason?.trim()) return;
+    const r = await fetch(`/api/admin/students/${s.id}?reason=${encodeURIComponent(reason)}`, { method: "DELETE" });
+    const d = await r.json();
+    if (r.ok) { toast(`Đã xóa hồ sơ ${s.public_id}`); setProfile(null); loadStudents(q); }
+    else toast(d.error ?? "Không xóa được");
+  }
+
   async function adjustScore(campaignId: string) {
     const points = Number(prompt("Số điểm điều chỉnh (âm để trừ):") ?? "");
     if (!Number.isFinite(points) || points === 0) return;
@@ -865,6 +876,9 @@ export default function AdminPage() {
               {profile.student.status === "locked" ? "🔒 Đang bị khóa" : "Đang hoạt động"}
               <button className="btn-ghost btn-sm btn-danger" style={{ marginLeft: 10 }} onClick={toggleLock}>
                 {profile.student.status === "locked" ? "Mở khóa" : "Khóa học viên"}
+              </button>
+              <button className="btn-ghost btn-sm btn-danger" style={{ marginLeft: 6 }} onClick={deleteStudent}>
+                🗑 Xóa hồ sơ
               </button>
             </p>
 

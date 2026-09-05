@@ -83,3 +83,32 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   });
   return NextResponse.json({ ok: true });
 }
+
+/**
+ * Xóa hẳn hồ sơ học viên — hành động KHÔNG hoàn tác được.
+ * Cascade xóa theo: kênh (giải phóng username cho người khác đăng ký), snapshot, điểm, ghi danh chiến dịch.
+ * Bắt buộc kèm ?reason=. Audit log lưu lại đủ thông tin nhận diện sau khi xóa.
+ */
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const auth = requireAdmin();
+  if ("error" in auth) return auth.error;
+  const db = supabaseAdmin();
+  const reason = req.nextUrl.searchParams.get("reason");
+  if (!reason?.trim()) return jsonError("Cần nhập lý do xóa hồ sơ");
+
+  const { data: st } = await db.from("students").select("id, public_id, full_name, phone").eq("id", params.id).maybeSingle();
+  if (!st) return jsonError("Không tìm thấy học viên", 404);
+  const { data: chans } = await db.from("channels").select("platform, username").eq("student_id", st.id);
+
+  const { error } = await db.from("students").delete().eq("id", st.id);
+  if (error) return jsonError("Không xóa được hồ sơ", 500);
+
+  await db.from("audit_logs").insert({
+    actor_id: "admin", action: "delete_student", target_type: "student", target_id: st.id,
+    detail: {
+      public_id: st.public_id, full_name: st.full_name, reason,
+      channels: (chans ?? []).map((c) => `${c.platform}:@${c.username}`),
+    },
+  });
+  return NextResponse.json({ ok: true });
+}
