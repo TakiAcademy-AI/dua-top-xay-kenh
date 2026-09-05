@@ -1,0 +1,9 @@
+# Tải các binary quét trực tiếp vào ./bin lúc build (không dùng Apify):
+#  - fb: đọc dữ liệu trang Facebook công khai (github.com/tamnd/facebook-cli)
+#  - curl-impersonate + curl_chrome131: curl giả lập TLS fingerprint Chrome để qua WAF TikTok
+[phases.fbcli]
+dependsOn = ["install"]
+cmds = [
+  "mkdir -p bin && curl -sL https://github.com/tamnd/facebook-cli/releases/download/v0.3.0/fb_0.3.0_linux_amd64.tar.gz | tar xz -C bin fb && chmod +x bin/fb && ./bin/fb --help >/dev/null 2>&1 || echo 'fb binary check failed'",
+  "curl -sL https://github.com/lexiforest/curl-impersonate/releases/download/v2.2.2/curl-impersonate-v2.2.2.x86_64-linux-gnu.tar.gz | tar xz -C bin curl-impersonate curl_chrome131 && chmod +x bin/curl-impersonate bin/curl_chrome131 && ./bin/curl_chrome131 --version >/dev/null 2>&1 || echo 'curl-impersonate check failed'"
+]

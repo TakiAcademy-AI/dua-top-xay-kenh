@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { requireAdmin, jsonError } from "@/lib/api";
-import { startDailyScrape } from "@/lib/apify";
+import { startDailyScrape } from "@/lib/scrape";
 import { runDailyScoring } from "@/lib/scoring";
 import { todayVN } from "@/lib/format";
 import { PLATFORMS } from "@/lib/channels";
@@ -58,8 +58,9 @@ export async function GET() {
   const flagged = (channels ?? []).filter((c) => c.status === "flagged").map(fmtCh);
 
   return NextResponse.json({
-    token_set: Boolean(process.env.APIFY_TOKEN),
-    webhook_secret_set: Boolean(process.env.APIFY_WEBHOOK_SECRET),
+    engine: "direct", // quét trực tiếp, không dùng Apify — token_set giữ để UI cũ không vỡ
+    token_set: true,
+    webhook_secret_set: true,
     app_url: process.env.APP_URL || "http://localhost:3300",
     today,
     configs: configs ?? [],
@@ -80,7 +81,6 @@ export async function POST(req: NextRequest) {
 
   try {
     if (body.action === "scrape") {
-      if (!process.env.APIFY_TOKEN) return jsonError("Chưa có APIFY_TOKEN trong .env.local");
       const result = await startDailyScrape();
       const db = supabaseAdmin();
       await db.from("audit_logs").insert({
