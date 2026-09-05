@@ -4,20 +4,30 @@ import fs from "fs";
 import path from "path";
 import { supabaseAdmin } from "./supabase";
 import { todayVN } from "./format";
-import type { NormalizedProfile } from "./apify";
+
+/** Số liệu chuẩn hóa của một kênh sau khi quét. */
+export type NormalizedProfile = {
+  ref: string;            // username nhận diện được
+  followers: number | null;
+  totalViews: number | null;
+  videosCount: number | null;
+  engagement: number | null;
+  bio: string;
+  raw: unknown;
+};
 
 /**
- * Engine quét TRỰC TIẾP — thay thế hoàn toàn Apify, chi phí $0:
+ * Engine quét TRỰC TIẾP — chi phí $0:
  *  - TikTok: đọc JSON __UNIVERSAL_DATA_FOR_REHYDRATION__ nhúng trong trang profile công khai.
  *  - Facebook: gọi binary `fb` (github.com/tamnd/facebook-cli) đọc dữ liệu trang ở chế độ ẩn danh.
  *  - YouTube: chờ YouTube Data API key (V1.1) — nền tảng đang bật mà chưa có engine sẽ báo skip.
  * Quét TUẦN TỰ có giãn cách ngẫu nhiên để không bị chặn. Kênh lỗi ghi scrape_status=failed
- * (giữ điểm hôm qua, không chặn kênh khác — cùng hành vi với pipeline Apify cũ).
+ * (giữ điểm hôm qua, không chặn kênh khác).
  *
  * Định nghĩa chỉ số (giữ tương thích với snapshot cũ):
- *  - TikTok: followers=followerCount · totalViews=heartCount (tổng tim, như mapper Apify cũ)
+ *  - TikTok: followers=followerCount · totalViews=heartCount (tổng tim)
  *            videosCount=videoCount · engagement=heartCount (tổng tương tác nhận được, cộng dồn)
- *  - Facebook: followers=followers (điều Apify cũ KHÔNG lấy được) · bio=chuỗi giới thiệu trang
+ *  - Facebook: followers thật + bio=chuỗi giới thiệu trang
  *            totalViews/videosCount/engagement=null (chế độ ẩn danh chỉ đọc được bài mới nhất)
  */
 

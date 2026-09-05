@@ -176,9 +176,8 @@ export default function AdminPage() {
       const d = await r.json();
       if (!r.ok) { toast(d.error ?? "Lỗi"); return; }
       if (action === "scrape") {
-        toast(d.started?.length
-          ? `Đã start ${d.started.length} run Apify (${d.started.map((s: any) => `${s.platform}: ${s.channels} kênh`).join(", ")})`
-          : "Không có kênh nào cần quét hoặc nền tảng nào đang bật");
+        const parts = (d.platforms ?? []).map((s: any) => `${s.platform}: ${s.ok}/${s.channels} kênh${s.verified ? ` (+${s.verified} xác minh)` : ""}`);
+        toast(parts.length ? `Đã quét xong — ${parts.join(" · ")}` : "Không có kênh nào cần quét hoặc nền tảng nào đang bật");
       } else {
         toast(`Đã tính điểm ${d.date}: ${d.campaigns} chiến dịch, ${d.entries} dòng điểm${d.flagged?.length ? `, gắn cờ ${d.flagged.length} kênh` : ""}`);
       }
@@ -188,16 +187,6 @@ export default function AdminPage() {
     }
   }
 
-  async function editActor(cfg: any) {
-    const actor = prompt(`Actor Apify cho ${cfg.platform} (dạng tac-gia/ten-actor):`, cfg.apify_actor)?.trim();
-    if (!actor || actor === cfg.apify_actor) return;
-    const r = await fetch("/api/admin/scrape", {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ platform: cfg.platform, apify_actor: actor }),
-    });
-    if (r.ok) { toast("Đã đổi Actor"); loadScrape(); }
-    else toast((await r.json()).error ?? "Lỗi");
-  }
 
   async function togglePlatform(cfg: any) {
     const r = await fetch("/api/admin/scrape", {
@@ -417,7 +406,7 @@ export default function AdminPage() {
           <button className={tab === "new" ? "on" : ""} onClick={() => setTab("new")}>+ Tạo chiến dịch</button>
           <button className={tab === "students" ? "on" : ""} onClick={() => setTab("students")}>Học viên</button>
           <button className={tab === "bxh" ? "on" : ""} onClick={() => setTab("bxh")}>Bảng xếp hạng</button>
-          <button className={tab === "scrape" ? "on" : ""} onClick={() => setTab("scrape")}>Quét & Apify</button>
+          <button className={tab === "scrape" ? "on" : ""} onClick={() => setTab("scrape")}>Quét dữ liệu</button>
         </div>
 
         {tab === "camp" && (
@@ -670,11 +659,8 @@ export default function AdminPage() {
           <div>
             <div className="grid grid-3" style={{ marginBottom: 18 }}>
               <div className="stat">
-                <b style={{ color: scrape?.token_set ? "var(--green)" : "var(--red)" }}>
-                  {scrape ? (scrape.token_set ? "Đã kết nối" : "Chưa có token") : "…"}
-                </b>
-                <span>Apify API token</span>
-                {scrape && !scrape.token_set && <span className="tr down">Dán APIFY_TOKEN vào .env.local rồi khởi động lại</span>}
+                <b style={{ color: "var(--green)" }}>{scrape ? "Quét trực tiếp" : "…"}</b>
+                <span>Engine quét (miễn phí, không qua bên thứ ba)</span>
               </div>
               <div className="stat">
                 <b>{scrape ? `${scrape.channels_scanned_today}/${scrape.channels_total}` : "…"}</b>
@@ -682,13 +668,13 @@ export default function AdminPage() {
               </div>
               <div className="stat">
                 <b>${scrape ? (scrape.cost.today ?? 0).toFixed(2) : "…"}</b>
-                <span>Chi phí Apify hôm nay (30 ngày: ${scrape ? (scrape.cost.last_30d ?? 0).toFixed(2) : "…"})</span>
+                <span>Chi phí quét hôm nay (30 ngày: ${scrape ? (scrape.cost.last_30d ?? 0).toFixed(2) : "…"})</span>
               </div>
             </div>
 
             <div className="card" style={{ marginBottom: 18 }}>
               <h3>
-                📡 Cấu hình Actor theo nền tảng
+                📡 Nền tảng quét
                 <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                   <button className="btn-ghost btn-sm" disabled={scrapeBusy} onClick={() => scrapeAction("scrape")}>
                     {scrapeBusy ? "Đang chạy…" : "▶ Quét ngay"}
@@ -700,29 +686,34 @@ export default function AdminPage() {
               </h3>
               <div className="table-scroll">
                 <table>
-                  <thead><tr><th>Nền tảng</th><th>Apify Actor</th><th>Trạng thái</th><th></th></tr></thead>
+                  <thead><tr><th>Nền tảng</th><th>Cách quét</th><th>Trạng thái</th><th></th></tr></thead>
                   <tbody>
-                    {(scrape?.configs ?? []).map((cfg: any) => (
-                      <tr key={cfg.platform}>
-                        <td><b>{cfg.platform}</b></td>
-                        <td style={{ fontFamily: "monospace", fontSize: 12 }}>{cfg.apify_actor}</td>
-                        <td><span className={`pill ${cfg.is_active ? "pill-live" : "pill-done"}`}>{cfg.is_active ? "Đang bật" : "Đang tắt"}</span></td>
-                        <td style={{ whiteSpace: "nowrap" }}>
-                          <button className="btn-ghost btn-sm" onClick={() => editActor(cfg)}>Đổi Actor</button>{" "}
-                          <button className="btn-ghost btn-sm" onClick={() => togglePlatform(cfg)}>{cfg.is_active ? "Tắt" : "Bật"}</button>
-                        </td>
-                      </tr>
-                    ))}
+                    {(scrape?.configs ?? []).map((cfg: any) => {
+                      const ENGINE: Record<string, string> = {
+                        tiktok: "Đọc trực tiếp trang profile",
+                        facebook: "Đọc trực tiếp trang (fb-cli)",
+                        youtube: "Chờ YouTube API key",
+                        instagram: "Chưa hỗ trợ quét trực tiếp",
+                      };
+                      return (
+                        <tr key={cfg.platform}>
+                          <td><b>{cfg.platform}</b></td>
+                          <td style={{ fontSize: 12.5, color: "var(--muted)" }}>{ENGINE[cfg.platform] ?? "—"}</td>
+                          <td><span className={`pill ${cfg.is_active ? "pill-live" : "pill-done"}`}>{cfg.is_active ? "Đang bật" : "Đang tắt"}</span></td>
+                          <td style={{ whiteSpace: "nowrap" }}>
+                            <button className="btn-ghost btn-sm" onClick={() => togglePlatform(cfg)}>{cfg.is_active ? "Tắt" : "Bật"}</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {scrape && !scrape.configs?.length && (
-                      <tr><td colSpan={4}>Chưa có cấu hình — chạy file supabase/seed.sql để nạp Actor mặc định.</td></tr>
+                      <tr><td colSpan={4}>Chưa có cấu hình nền tảng.</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
               <p className="mini-note" style={{ marginTop: 10 }}>
-                Lịch tự động: quét 05:30, tính điểm 06:00 giờ VN. Webhook nhận kết quả:{" "}
-                <code>{scrape?.app_url}/api/apify-callback</code>
-                {scrape && !scrape.webhook_secret_set && <b style={{ color: "var(--red)" }}> — chưa đặt APIFY_WEBHOOK_SECRET!</b>}
+                Lịch tự động: quét 05:30 · tính điểm 06:00 giờ VN. Quét trực tiếp từ máy chủ, không tốn phí dịch vụ ngoài.
               </p>
             </div>
 
@@ -749,10 +740,10 @@ export default function AdminPage() {
             </div>
 
             <div className="card">
-              <h3>🗂 20 run Apify gần nhất</h3>
+              <h3>🗂 20 lượt quét gần nhất</h3>
               <div className="table-scroll">
                 <table>
-                  <thead><tr><th>Thời điểm</th><th>Nền tảng</th><th>Actor</th><th>Kênh</th><th>Trạng thái</th><th>Chi phí</th></tr></thead>
+                  <thead><tr><th>Thời điểm</th><th>Nền tảng</th><th>Engine</th><th>Kênh</th><th>Trạng thái</th><th>Chi phí</th></tr></thead>
                   <tbody>
                     {(scrape?.runs ?? []).map((r: any) => (
                       <tr key={r.id}>
@@ -768,7 +759,7 @@ export default function AdminPage() {
                         <td>{r.cost_usd != null ? `$${Number(r.cost_usd).toFixed(3)}` : "—"}</td>
                       </tr>
                     ))}
-                    {scrape && !scrape.runs?.length && <tr><td colSpan={6}>Chưa có run nào. Bấm "Quét ngay" để chạy thử.</td></tr>}
+                    {scrape && !scrape.runs?.length && <tr><td colSpan={6}>Chưa có lượt quét nào. Bấm "Quét ngay" để chạy thử.</td></tr>}
                   </tbody>
                 </table>
               </div>

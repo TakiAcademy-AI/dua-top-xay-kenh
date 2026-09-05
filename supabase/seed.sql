@@ -6,14 +6,12 @@ insert into classes (name, code) values
   ('AI Scale Up — Cohort 2', 'AISU-C2')
 on conflict (code) do nothing;
 
--- Actor Apify khuyến nghị theo đặc tả. input_template:
---   channel_key: tên field nhận danh sách kênh trong input của Actor
---   channel_value: 'username' hoặc 'url' | wrap_url: bọc thành [{url}] | extra: input cố định thêm vào
+-- Nền tảng quét (engine trực tiếp — cột apify_actor giữ lại vì schema cũ, giá trị 'direct')
 insert into platform_configs (platform, apify_actor, input_template, is_active) values
-  ('tiktok',    'clockworks/tiktok-scraper',    '{"channel_key":"profiles","channel_value":"username","extra":{"resultsPerPage":10,"shouldDownloadVideos":false,"shouldDownloadCovers":false,"profileScrapeSections":["videos"],"profileSorting":"latest"}}', true),
-  ('youtube',   'streamers/youtube-scraper',    '{"channel_key":"startUrls","channel_value":"url","wrap_url":true,"extra":{"maxResults":10,"maxResultsShorts":10}}', true),
-  ('instagram', 'apify/instagram-scraper',      '{"channel_key":"directUrls","channel_value":"url","extra":{"resultsType":"details","resultsLimit":10}}', false),
-  ('facebook',  'apify/facebook-posts-scraper', '{"channel_key":"startUrls","channel_value":"url","wrap_url":true,"extra":{"resultsLimit":10}}', false)
+  ('tiktok',    'direct', null, true),
+  ('facebook',  'direct', null, true),
+  ('youtube',   'direct', null, false),
+  ('instagram', 'direct', null, false)
 on conflict (platform) do nothing;
 
 -- Chiến dịch mẫu cho lớp MTKC K12 (đang chạy)
