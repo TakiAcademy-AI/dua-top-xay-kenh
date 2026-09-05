@@ -72,11 +72,11 @@ export async function scrapeTikTokProfile(username: string): Promise<NormalizedP
   try {
     const { stdout } = await pexec(bin, args, { timeout: 50_000, maxBuffer: 20 * 1024 * 1024 });
     html = stdout;
-  } catch {
-    return null;
+  } catch (e: any) {
+    throw new Error(String(e?.stderr || e?.message || e).slice(0, 300) || "curl failed");
   }
   const m = html.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application\/json">([\s\S]*?)<\/script>/);
-  if (!m) return null; // trang bot-check hoặc đổi cấu trúc
+  if (!m) throw new Error(`bot-check/đổi cấu trúc (html ${html.length} bytes)`); // trang bot-check hoặc đổi cấu trúc
   let scope: any;
   try {
     scope = JSON.parse(m[1])?.__DEFAULT_SCOPE__ ?? {};
@@ -121,17 +121,19 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
       bio,
       raw: { engine: "facebook-cli", name: d.name, likes: num(d.likes), category: d.category ?? null },
     };
-  } catch {
-    return null; // trang bắt đăng nhập / binary lỗi -> failed, giữ điểm cũ
+  } catch (e: any) {
+    // trang bắt đăng nhập / binary lỗi -> failed, giữ điểm cũ; ném kèm chi tiết để lưu vào snapshot
+    const detail = String(e?.stderr || e?.message || e).replace(/\s+/g, " ").slice(0, 300);
+    throw new Error(detail || "fb-cli failed");
   }
 }
 
 /* ==== Lưu snapshot + xác minh bio (cùng logic với pipeline cũ) ==== */
-async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string): Promise<{ ok: boolean; verified: boolean }> {
+async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string, errDetail?: string): Promise<{ ok: boolean; verified: boolean }> {
   const db = supabaseAdmin();
   if (!prof) {
     await db.from("channel_snapshots").upsert(
-      { channel_id: ch.id, snapshot_date: date, scrape_status: "failed", raw: { engine: "direct", error: "no-data" } },
+      { channel_id: ch.id, snapshot_date: date, scrape_status: "failed", raw: { engine: "direct", error: errDetail ?? "no-data" } },
       { onConflict: "channel_id,snapshot_date" }
     );
     return { ok: false, verified: false };
@@ -224,16 +226,22 @@ export async function startDailyScrape(): Promise<ScrapeResult> {
     const stat = { platform: cfg.platform, channels: list.length, ok: 0, failed: [] as string[], verified: 0 };
     for (const ch of list) {
       let prof: NormalizedProfile | null = null;
+      let errDetail: string | undefined;
       try {
         prof = await scraper(ch.username);
-        if (!prof) {
-          await sleep(jitter(4000)); // nghỉ dài hơn rồi thử lại 1 lần
-          prof = await scraper(ch.username);
-        }
-      } catch {
-        prof = null;
+      } catch (e: any) {
+        errDetail = String(e?.message ?? e);
       }
-      const saved = await saveProfile(ch, prof, date);
+      if (!prof) {
+        await sleep(jitter(4000)); // nghỉ dài hơn rồi thử lại 1 lần
+        try {
+          prof = await scraper(ch.username);
+          errDetail = undefined;
+        } catch (e: any) {
+          errDetail = String(e?.message ?? e);
+        }
+      }
+      const saved = await saveProfile(ch, prof, date, errDetail);
       if (saved.ok) stat.ok++;
       else stat.failed.push(`${ch.platform}:@${ch.username}`);
       if (saved.verified) stat.verified++;
