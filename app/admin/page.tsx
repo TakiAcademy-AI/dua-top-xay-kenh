@@ -406,7 +406,7 @@ export default function AdminPage() {
           <button className={tab === "new" ? "on" : ""} onClick={() => setTab("new")}>+ Tạo chiến dịch</button>
           <button className={tab === "students" ? "on" : ""} onClick={() => setTab("students")}>Học viên</button>
           <button className={tab === "bxh" ? "on" : ""} onClick={() => setTab("bxh")}>Bảng xếp hạng</button>
-          <button className={tab === "scrape" ? "on" : ""} onClick={() => setTab("scrape")}>Quét</button>
+          <button className={tab === "scrape" ? "on" : ""} onClick={() => setTab("scrape")}>Quét dữ liệu</button>
         </div>
 
         {tab === "camp" && (
