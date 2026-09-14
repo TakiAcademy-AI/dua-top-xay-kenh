@@ -126,9 +126,11 @@ export async function runDailyScoring(date: string): Promise<ScoringReport> {
           break;
         }
       }
+      // Mốc khởi điểm khi không có snapshot trước: follower/view/TƯƠNG TÁC đều tính từ 0 (nhất quán -> mô hình
+      // "tính toàn bộ chỉ số hiện có"). Riêng videos_count để null: KHÔNG tính video có sẵn, chỉ video đăng mới.
       const prev: Partial<Snapshot> =
         prevSnap ??
-        ({ followers: ch.baseline_followers, total_views: ch.baseline_views, videos_count: null, engagement: null } as Partial<Snapshot>);
+        ({ followers: ch.baseline_followers, total_views: ch.baseline_views, videos_count: null, engagement: 0 } as Partial<Snapshot>);
 
       const dF = clamp0((today.followers ?? 0) - (prev.followers ?? today.followers ?? 0));
       const dV = clamp0(Number(today.total_views ?? 0) - Number(prev.total_views ?? today.total_views ?? 0));
