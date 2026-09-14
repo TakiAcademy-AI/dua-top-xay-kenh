@@ -151,17 +151,22 @@ export async function runDailyScoring(date: string): Promise<ScoringReport> {
       const spikeRatio = Number(process.env.FRAUD_SPIKE_RATIO || 2); // >200% baseline / ngày
       const spike = baseline > 0 && dF > spikeRatio * baseline;
       const byHistory = hist.length >= 3 && avg7 > 0 && dF > fraudMult * avg7 && engRatio < fraudRatio;
+      // KHÔNG tự gắn cờ + treo điểm nữa: luật này hay bắt nhầm kênh VIRAL THẬT (1 video bùng nổ view
+      // trước, tương tác theo sau) — mà viral thật lại là thứ cuộc thi muốn khuyến khích. Chỉ ghi nhận
+      // nghi vấn vào log để admin tự xem; vẫn tính điểm bình thường. Bật lại bằng env FRAUD_AUTOFLAG=true.
       if (spike || byHistory) {
-        await db.from("channels").update({ status: "flagged" }).eq("id", ch.id);
         await db.from("audit_logs").insert({
           actor_id: "system",
-          action: "flag_channel",
+          action: "suspect_spike",
           target_type: "channel",
           target_id: ch.id,
           detail: { date, delta_follower: dF, baseline, avg7, engagement_ratio: engRatio, rule: spike ? "spike_vs_baseline" : "spike_vs_avg7" },
         });
-        report.flagged.push(`${ch.platform}:@${ch.username}`);
-        continue;
+        if (process.env.FRAUD_AUTOFLAG === "true") {
+          await db.from("channels").update({ status: "flagged" }).eq("id", ch.id);
+          report.flagged.push(`${ch.platform}:@${ch.username}`);
+          continue;
+        }
       }
 
       // Hệ số chuẩn hóa theo quy mô xuất phát (chỉ áp cho điểm follower)
