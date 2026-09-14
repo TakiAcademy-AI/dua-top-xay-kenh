@@ -70,7 +70,7 @@ export default function HomePage() {
             ) : (
               <>
                 <a href="/dang-nhap">Đăng nhập</a>
-                <a className="cta" href="/dang-ky">Vào đường đua</a>
+                <a className="cta" href="/dang-ky">Vào đua</a>
               </>
             )}
           </nav>
