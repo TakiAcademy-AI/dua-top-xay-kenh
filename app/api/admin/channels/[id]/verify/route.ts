@@ -13,7 +13,8 @@ const SCRAPERS: Record<string, (u: string) => Promise<any>> = {
 };
 
 /**
- * Xác minh tay một kênh. Mô hình điểm: tính TOÀN BỘ follower hiện có -> mốc khởi điểm (baseline) = 0
+ * Xác minh tay một kênh, HOẶC gỡ cờ gian lận cho kênh đang bị gắn cờ (xem nhánh isUnflag bên dưới).
+ * Mô hình điểm: tính TOÀN BỘ follower hiện có -> mốc khởi điểm (baseline) = 0
  * (kênh cũ đã có sẵn follower khi vào đua cũng được tính hết thành điểm).
  * Vẫn quét 1 lần để lưu snapshot + xác nhận đọc được kênh, nhưng KHÔNG bắt buộc quét thành công:
  * admin luôn duyệt được (kể cả FB cá nhân giấu follower) vì baseline không phụ thuộc số quét.
@@ -52,25 +53,34 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
   }
 
-  // Mặc định baseline = 0 (tính full follower). Admin có thể ép số khác nếu cần.
-  const baselineFollowers = body?.baseline_followers != null ? Number(body.baseline_followers) : 0;
-  const baselineViews = body?.baseline_views != null ? Number(body.baseline_views) : 0;
+  // GỠ CỜ khác hẳn XÁC MINH LẦN ĐẦU. Kênh bị gắn cờ là kênh đã đua rồi, đã ăn điểm theo mốc cũ.
+  // Kéo verified_at về hôm nay thì job tính điểm không nhận snapshot trước đó nữa, dF thành TOÀN BỘ
+  // follower, vượt xa avg7 -> luật chống gian lận gắn cờ lại ngay lượt chấm sau. Gỡ bao nhiêu lần
+  // cũng vô ích. Nên khi gỡ cờ chỉ đổi status, giữ nguyên verified_at và baseline.
+  const isUnflag = ch.status === "flagged" && ch.verified_at != null;
 
-  const { error } = await db
-    .from("channels")
-    .update({
-      status: "verified",
-      verified_at: new Date().toISOString(),
-      verified_by: "admin",
-      baseline_followers: baselineFollowers,
-      baseline_views: baselineViews,
-    })
-    .eq("id", ch.id);
+  const patch: Record<string, unknown> = { status: "verified", verified_by: "admin" };
+  if (!isUnflag) {
+    // Xác minh lần đầu: chốt mốc khởi điểm. Mặc định 0 = tính toàn bộ follower hiện có thành điểm.
+    patch.verified_at = new Date().toISOString();
+    patch.baseline_followers = body?.baseline_followers != null ? Number(body.baseline_followers) : 0;
+    patch.baseline_views = body?.baseline_views != null ? Number(body.baseline_views) : 0;
+  } else {
+    // Gỡ cờ mà admin cố ý ép mốc mới thì tôn trọng, nhưng vẫn không đụng vào verified_at.
+    if (body?.baseline_followers != null) patch.baseline_followers = Number(body.baseline_followers);
+    if (body?.baseline_views != null) patch.baseline_views = Number(body.baseline_views);
+  }
+
+  const { error } = await db.from("channels").update(patch).eq("id", ch.id);
   if (error) return jsonError("Không cập nhật được", 500);
 
+  const baselineFollowers = (patch.baseline_followers ?? ch.baseline_followers) as number | null;
   await db.from("audit_logs").insert({
-    actor_id: "admin", action: "verify_channel_manual", target_type: "channel", target_id: ch.id,
-    detail: { previous_status: ch.status, baseline_followers: baselineFollowers, scraped },
+    actor_id: "admin",
+    action: isUnflag ? "unflag_channel" : "verify_channel_manual",
+    target_type: "channel",
+    target_id: ch.id,
+    detail: { previous_status: ch.status, baseline_followers: baselineFollowers, kept_verified_at: isUnflag, scraped },
   });
-  return NextResponse.json({ ok: true, baseline_followers: baselineFollowers, scraped });
+  return NextResponse.json({ ok: true, unflagged: isUnflag, baseline_followers: baselineFollowers, scraped });
 }

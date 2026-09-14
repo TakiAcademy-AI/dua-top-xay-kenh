@@ -109,6 +109,11 @@ export default function AdminPage() {
   const [profile, setProfile] = useState<any | null>(null);
   const [scrape, setScrape] = useState<any | null>(null);
   const [scrapeBusy, setScrapeBusy] = useState(false);
+  // Ngày muốn tính điểm lại. Mặc định hôm nay; đổi sang ngày cũ để bù điểm cho ngày
+  // kênh bị gắn cờ oan hoặc quét lỗi. Job tính điểm idempotent theo ngày nên chạy lại an toàn.
+  const [scoreDate, setScoreDate] = useState(() =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date())
+  );
   const [platforms, setPlatforms] = useState<{ value: string; label: string }[]>([]);
   const [addChan, setAddChan] = useState<{ platform: string; url: string } | null>(null);
 
@@ -184,7 +189,9 @@ export default function AdminPage() {
     setScrapeBusy(true);
     try {
       const r = await fetch("/api/admin/scrape", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(action === "score" ? { action, date: scoreDate } : { action }),
       });
       const d = await r.json();
       if (!r.ok) { toast(d.error ?? "Lỗi"); return; }
@@ -712,8 +719,16 @@ export default function AdminPage() {
                   <button className="btn-ghost btn-sm" disabled={scrapeBusy} onClick={() => scrapeAction("scrape")}>
                     {scrapeBusy ? "Đang chạy…" : "▶ Quét ngay"}
                   </button>
+                  <input
+                    type="date"
+                    value={scoreDate}
+                    max={new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date())}
+                    onChange={(e) => setScoreDate(e.target.value)}
+                    style={{ fontSize: 12.5, padding: "4px 7px", borderRadius: 7 }}
+                    title="Ngày cần tính điểm lại"
+                  />
                   <button className="btn-ghost btn-sm" disabled={scrapeBusy} onClick={() => scrapeAction("score")}>
-                    🧮 Tính điểm lại hôm nay
+                    🧮 Tính điểm lại
                   </button>
                 </span>
               </h3>

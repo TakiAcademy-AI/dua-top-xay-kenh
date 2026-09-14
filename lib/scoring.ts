@@ -104,19 +104,31 @@ export async function runDailyScoring(date: string): Promise<ScoringReport> {
         report.scrapeFailed.push(`${ch.platform}:@${ch.username}`);
         continue; // kênh lỗi quét: giữ điểm hôm qua, không chặn kênh khác
       }
-      // Mốc so sánh (prev): dùng snapshot HÔM QUA khi hôm qua kênh ĐÃ xác minh; nếu không thì
-      // quay về baseline. Mô hình hiện tại: baseline = 0 (chốt lúc xác minh) -> ngày đầu tính TOÀN BỘ
-      // follower hiện có thành điểm, các ngày sau cộng thêm phần tăng trưởng. Cộng dồn = tổng follower
-      // hiện tại. Kênh cũ có sẵn follower khi vào đua cũng được tính hết.
-      const prevDay = addDays(date, -1);
+      // Mốc so sánh (prev): snapshot 'ok' GẦN NHẤT trước ngày đang tính, kể từ ngày kênh được xác
+      // minh trở đi. Mô hình: baseline = 0 (chốt lúc xác minh) -> ngày đầu tính TOÀN BỘ follower hiện
+      // có thành điểm, các ngày sau chỉ cộng phần tăng trưởng. Cộng dồn = tổng follower hiện tại.
+      //
+      // KHÔNG chỉ nhìn đúng hôm qua: mất snapshot hôm qua (tắt nền tảng trong Admin, server chết,
+      // GitHub Action lỗi, hoặc vừa gỡ cờ làm verified_at nhảy về hôm nay) sẽ rơi thẳng về baseline 0,
+      // khiến dF = TOÀN BỘ follower. Hậu quả kép: cộng lại từ đầu số điểm đã cộng rồi, đồng thời
+      // dF vượt xa avg7 nên luật chống gian lận bên dưới gắn cờ oan chính kênh vừa được gỡ cờ.
+      // Lùi về snapshot tốt gần nhất thì dF luôn là phần tăng trưởng thật kể từ lần đọc được số.
       const verifiedDay = ch.verified_at
         ? new Date(new Date(ch.verified_at).getTime() + 7 * 3_600_000).toISOString().slice(0, 10)
         : null;
-      const prevSnap = byDate?.get(prevDay);
+      let prevSnap: Snapshot | undefined;
+      for (let i = 1; i <= 8; i++) {   // 8 = đúng bề rộng cửa sổ snapshot đã nạp ở trên
+        const d = addDays(date, -i);
+        if (verifiedDay && d < verifiedDay) break;  // trước ngày xác minh thì không tính
+        const s = byDate?.get(d);
+        if (s && s.scrape_status === "ok" && s.followers != null) {
+          prevSnap = s;
+          break;
+        }
+      }
       const prev: Partial<Snapshot> =
-        prevSnap && (!verifiedDay || prevDay >= verifiedDay)
-          ? prevSnap
-          : ({ followers: ch.baseline_followers, total_views: ch.baseline_views, videos_count: null, engagement: null } as Partial<Snapshot>);
+        prevSnap ??
+        ({ followers: ch.baseline_followers, total_views: ch.baseline_views, videos_count: null, engagement: null } as Partial<Snapshot>);
 
       const dF = clamp0((today.followers ?? 0) - (prev.followers ?? today.followers ?? 0));
       const dV = clamp0(Number(today.total_views ?? 0) - Number(prev.total_views ?? today.total_views ?? 0));
