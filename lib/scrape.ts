@@ -192,8 +192,8 @@ export async function scrapeFacebookReels(username: string, proxy?: string): Pro
 
 export async function scrapeFacebookPage(username: string): Promise<NormalizedProfile | null> {
   const proxy = await getScrapeProxy();
-  // View + số video (reel) do WORKER Playwright (đăng nhập, cuộn hết) đảm nhiệm — chính xác hơn hẳn
-  // curl (curl chỉ thấy ~10 reel đầu). Ở đây KHÔNG quét reels để khỏi ghi đè số đầy đủ của worker.
+  // Quét tab Reels SONG SONG với trang chính (không phụ thuộc nhau) -> khỏi chậm gấp đôi.
+  const reelsPromise = scrapeFacebookReels(username, proxy).catch(() => null);
   const impersonate = path.join(process.cwd(), "bin", "curl_chrome131");
   const bin = fs.existsSync(impersonate) ? impersonate : "curl";
   const url = /^\d+$/.test(username)
@@ -259,16 +259,21 @@ export async function scrapeFacebookPage(username: string): Promise<NormalizedPr
 
   if (followers == null && !bio) throw new Error("og:description không parse được số liệu");
 
-  // View + số video để null: worker Playwright quản lý (không ghi đè ở đây).
+  // Kết quả reels (đã chạy song song ở trên). Lỗi reels KHÔNG chặn việc lấy follower.
+  const reels = await reelsPromise;
+  const totalViews: number | null = reels ? reels.totalViews : null;
+  const videosCount: number | null = reels ? reels.videoCount : null;
+
   return {
     ref: username.toLowerCase(),
     followers,
-    totalViews: null,
-    videosCount: null,
+    totalViews,
+    videosCount,
     engagement: toNum(talking),
     bio,
     raw: {
       engine: "facebook-curl", name, likes: toNum(likes), talking: toNum(talking),
+      reels_views: totalViews, reels_count: videosCount,
       // debug khi không đọc được follower — soi VPS nhận HTML gì
       ...(followers == null
         ? { dbg_len: htmlText.length, dbg_has_follow: htmlText.includes("follower") || htmlText.includes("theo dõi"),
@@ -332,20 +337,19 @@ async function saveProfile(ch: any, prof: NormalizedProfile | null, date: string
     }
   }
 
-  const row: Record<string, unknown> = {
-    channel_id: ch.id,
-    snapshot_date: date,
-    followers: followersOut,
-    engagement: engagementOut,
-    raw: prof.raw,
-    scrape_status: "ok",
-  };
-  // Chỉ ghi total_views/videos_count khi CÓ số (vd engine tiktok). Với Facebook để null -> KHÔNG đụng
-  // vào giá trị worker Playwright đã ghi (tránh ghi đè số reel đầy đủ bằng số 10-reel/không có).
-  if (prof.totalViews != null) row.total_views = prof.totalViews;
-  if (prof.videosCount != null) row.videos_count = prof.videosCount;
-
-  const { error } = await db.from("channel_snapshots").upsert(row, { onConflict: "channel_id,snapshot_date" });
+  const { error } = await db.from("channel_snapshots").upsert(
+    {
+      channel_id: ch.id,
+      snapshot_date: date,
+      followers: followersOut,
+      total_views: prof.totalViews,
+      videos_count: prof.videosCount,
+      engagement: engagementOut,
+      raw: prof.raw,
+      scrape_status: "ok",
+    },
+    { onConflict: "channel_id,snapshot_date" }
+  );
   return { ok: !error, verified };
 }
 
