@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { checkCronSecret, jsonError } from "@/lib/api";
 import { todayVN } from "@/lib/format";
+import { runDailyScoring } from "@/lib/scoring";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 /** Extension gửi kết quả đếm reel về đây -> ghi total_views + videos_count vào snapshot hôm nay.
  *  body: { results: [{ channel_id, videos_count, total_views }] }. Auth = CRON_SECRET. */
@@ -30,5 +32,14 @@ export async function POST(req: NextRequest) {
     );
     if (!error) ok++;
   }
-  return NextResponse.json({ ok, received: results.length });
+
+  // Chấm điểm lại NGAY sau khi có view/reel mới -> Sếp chỉ cần bấm extension, khỏi vào admin.
+  let scored = 0;
+  try {
+    const report = await runDailyScoring(today);
+    scored = report.entries;
+  } catch (e) {
+    /* lỗi chấm điểm không chặn việc ghi reel */
+  }
+  return NextResponse.json({ ok, received: results.length, scored });
 }
