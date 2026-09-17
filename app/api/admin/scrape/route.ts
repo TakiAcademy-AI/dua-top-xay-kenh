@@ -66,6 +66,11 @@ export async function POST(req: NextRequest) {
     if (body.action === "scrape") {
       const result = await startDailyScrape();
       const db = supabaseAdmin();
+      // Đặt cờ để extension (đang mở trong Chrome) tự chạy quét reels — Sếp khỏi bấm icon.
+      await db.from("app_settings").upsert(
+        { key: "ext_scrape_request", value: String(Date.now()) },
+        { onConflict: "key" }
+      );
       await db.from("audit_logs").insert({
         actor_id: "admin", action: "manual_scrape", target_type: "system", detail: result as any,
       });
