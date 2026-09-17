@@ -166,7 +166,11 @@ function parseCompact(s: string | undefined | null): number | null {
  * FB nhúng sẵn "play_count_reduced":"2.5K" cho mỗi reel trong HTML (SSR) -> curl đọc được, không cần JS.
  * Lưu ý: chỉ lấy được lô reel render sẵn ban đầu (~8-12 reel mới nhất với kênh nhiều bài); view là số rút gọn.
  */
-export async function scrapeFacebookReels(username: string, proxy?: string): Promise<{ totalViews: number; videoCount: number } | null> {
+export type ReelView = { id: string; views: number };
+
+/** Bản KHÔNG đăng nhập chỉ hiện ~10 reel Facebook chọn (thường gồm reel view cao/viral) — bổ khuyết cho
+ *  extension (bản đăng nhập chỉ thấy reel mới nhất). Trả danh sách {id, views} để hợp nhất theo id. */
+export async function scrapeFacebookReels(username: string, proxy?: string): Promise<{ reels: ReelView[] } | null> {
   const impersonate = path.join(process.cwd(), "bin", "curl_chrome131");
   const bin = fs.existsSync(impersonate) ? impersonate : "curl";
   const url = /^\d+$/.test(username)
@@ -181,13 +185,48 @@ export async function scrapeFacebookReels(username: string, proxy?: string): Pro
   } catch {
     return null;
   }
-  const views: number[] = [];
-  for (const m of html.matchAll(/"play_count_reduced":"([^"]+)"/g)) {
+  const reels: ReelView[] = [];
+  const re = /"play_count_reduced":"([^"]+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
     const v = parseCompact(m[1]);
-    if (v != null) views.push(v);
+    if (v == null) continue;
+    // ghép id reel NGAY SAU view (mỗi reel 1 id -> hợp nhất không trùng); không có thì khóa theo vị trí
+    const after = html.slice(m.index + 20, m.index + 400);
+    const idm = after.match(/"id":"([A-Za-z0-9+/=_:-]{8,})"/);
+    reels.push({ id: idm ? idm[1] : `p${m.index}`, views: v });
   }
-  if (!views.length) return { totalViews: 0, videoCount: 0 };
-  return { totalViews: views.reduce((s, v) => s + v, 0), videoCount: views.length };
+  return { reels };
+}
+
+/** Ghi (hợp nhất) các reel vào channel_reels: mỗi reel 1 dòng theo (kênh, ngày, reel_id).
+ *  Cùng reel từ 2 nguồn -> cùng id -> 1 dòng (không cộng đôi). Ghi lô 500 để tránh payload lớn. */
+export async function upsertReels(channelId: string, date: string, reels: ReelView[], source: string): Promise<void> {
+  const rows = (reels ?? [])
+    .filter((r) => r.id && Number.isFinite(r.views))
+    .map((r) => ({
+      channel_id: channelId, snapshot_date: date, reel_id: String(r.id).slice(0, 200),
+      views: Math.max(0, Math.round(r.views)), source, updated_at: new Date().toISOString(),
+    }));
+  if (!rows.length) return;
+  const db = supabaseAdmin();
+  for (let i = 0; i < rows.length; i += 500) {
+    await db.from("channel_reels").upsert(rows.slice(i, i + 500), { onConflict: "channel_id,snapshot_date,reel_id" });
+  }
+}
+
+/** Tính lại total_views + videos_count của kênh = HỢP NHẤT mọi reel (mọi nguồn) trong ngày. */
+export async function recomputeChannelViews(channelId: string, date: string): Promise<{ total: number; count: number }> {
+  const db = supabaseAdmin();
+  const { data } = await db.from("channel_reels").select("views").eq("channel_id", channelId).eq("snapshot_date", date);
+  const rows = data ?? [];
+  const total = rows.reduce((s: number, r: any) => s + (Number(r.views) || 0), 0);
+  const count = rows.length;
+  await db.from("channel_snapshots").upsert(
+    { channel_id: channelId, snapshot_date: date, total_views: total, videos_count: count },
+    { onConflict: "channel_id,snapshot_date" }
+  );
+  return { total, count };
 }
 
 export async function scrapeFacebookPage(username: string): Promise<NormalizedProfile | null> {
@@ -423,5 +462,41 @@ export async function startDailyScrape(): Promise<ScrapeResult> {
       .eq("run_id", runId);
     result.platforms.push(stat);
   }
+
+  // Lượt phụ: server tự curl bản KHÔNG đăng nhập lấy reel viral/top mà extension (đăng nhập) hay sót.
+  // Tốn proxy (mỗi trang ~19MB) nên GIỚI HẠN mỗi 4 giờ; extension vẫn lo phần reel mới mỗi lần quét.
+  try {
+    await curlReelsUnion(channels ?? [], configs ?? [], date);
+  } catch (e) {
+    console.error("[scrape] curlReelsUnion", e);
+  }
   return result;
+}
+
+const REELS_CURL_EVERY_MS = 4 * 60 * 60_000; // 4 giờ
+
+/** Curl bản không-đăng-nhập cho các kênh Facebook, ghi vào channel_reels (source=curl) rồi hợp nhất.
+ *  Có time-gate qua app_settings.last_reels_curl_ms để không curl 19MB/kênh mỗi 30 phút. */
+async function curlReelsUnion(channels: any[], configs: { platform: string }[], date: string): Promise<void> {
+  if (!configs.some((c) => c.platform === "facebook")) return;
+  const db = supabaseAdmin();
+  const { data: g } = await db.from("app_settings").select("value").eq("key", "last_reels_curl_ms").maybeSingle();
+  const last = Number(g?.value) || 0;
+  if (Date.now() - last < REELS_CURL_EVERY_MS) return; // chưa tới hạn
+  await db.from("app_settings").upsert({ key: "last_reels_curl_ms", value: String(Date.now()) }, { onConflict: "key" });
+
+  const proxy = await getScrapeProxy();
+  const fb = channels.filter((c) => c.platform === "facebook" && (c.status === "verified" || c.status === "pending"));
+  for (const ch of fb) {
+    try {
+      const r = await scrapeFacebookReels(ch.username, proxy);
+      if (r && r.reels.length) {
+        await upsertReels(ch.id, date, r.reels, "curl");
+        await recomputeChannelViews(ch.id, date);
+      }
+    } catch (e) {
+      console.error(`[scrape] reels curl @${ch.username}`, e);
+    }
+    await sleep(jitter(2000));
+  }
 }
